@@ -1,6 +1,9 @@
 <?php
 
 include_once './FirebaseJWT/JWT.php';
+include_once './FirebaseJWT/ExpiredException.php';
+include_once './FirebaseJWT/BeforeValidException.php';
+include_once './FirebaseJWT/SignatureInvalidException.php';
 
 /**
  * IMPORTANT:
@@ -9,7 +12,9 @@ include_once './FirebaseJWT/JWT.php';
  * for a list of spec-compliant algorithms.
  */
 function createJWT($claims) {
-    $claims['exp'] = time() - 60 * 1;
+    $claims['exp'] = time() + 60 * 1;
+    $claims['iat'] = time();
+    $claims['nbf'] = time();
     $key = "qwerty";
     return \Firebase\JWT\JWT::encode($claims, $key, 'HS512');
 }
@@ -19,6 +24,10 @@ function verifyJWT($token) {
     try {
         $obj = \Firebase\JWT\JWT::decode($token, $key, array('HS512'));
         return $obj->id;
+    } catch (\Firebase\JWT\SignatureInvalidException $exc) {
+        echo 'SignatureInvalidException';
+    } catch (\Firebase\JWT\BeforeValidException $exc) {
+        echo 'BeforeValidException';
     } catch (\Firebase\JWT\ExpiredException $exc) {
         echo 'ExpiredException';
     } catch (Exception $exc) {
