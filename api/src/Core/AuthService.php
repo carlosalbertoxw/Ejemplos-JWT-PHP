@@ -1,0 +1,118 @@
+<?php
+
+namespace Api\Core;
+
+use Api\Data\RefreshTokenRepository;
+use Api\Data\UserRepository;
+
+/**
+ * Orquesta el flujo de autenticación: login, renovación con rotación
+ * de refresh tokens (con detección de reuso) y logout.
+ */
+final class AuthService
+{
+    /**
+     * Hash bcrypt VÁLIDO de una cadena descartable. Cuando el usuario no
+     * existe se verifica la contraseña contra este señuelo para que el
+     * tiempo de respuesta sea el mismo que con un usuario real y no se
+     * pueda deducir qué usuarios existen (ataque de enumeración por timing).
+     */
+    private const DECOY_HASH = '$2y$10$/13BG0nzGmkGffa.sDU11uVEDfKFDttofC1EDO4iB0K8gG4ybgQNC';
+
+    public function __construct(
+        private readonly UserRepository $users,
+        private readonly RefreshTokenRepository $refreshTokens,
+        private readonly JwtService $jwt,
+        private readonly PasswordHasher $hasher,
+        private readonly int $accessTokenTtl,
+        private readonly int $refreshTokenTtl,
+    ) {
+    }
+
+    /**
+     * Valida credenciales y devuelve el par de tokens, o null si son inválidas.
+     */
+    public function login(string $username, string $password): ?array
+    {
+        $user = $this->users->findByUsername($username);
+
+        // Verificar SIEMPRE contra un hash real (el del usuario o el señuelo)
+        // para que el tiempo de respuesta no revele si el usuario existe.
+        $hash = $user['password_hash'] ?? self::DECOY_HASH;
+
+        if (!$this->hasher->verify($password, $hash) || $user === null) {
+            return null;
+        }
+
+        return $this->issueTokenPair($user);
+    }
+
+    /**
+     * Renueva el par de tokens a partir de un refresh token válido.
+     *
+     * El token usado se revoca en el acto (rotación). Si llega un token que
+     * ya fue rotado/revocado, se asume robo (alguien lo usó dos veces) y se
+     * revocan TODOS los refresh tokens del usuario: tanto el atacante como
+     * el usuario legítimo pierden la sesión y deben volver a autenticarse.
+     */
+    public function refresh(string $refreshToken): ?array
+    {
+        $stored = $this->refreshTokens->findValid($refreshToken);
+        if ($stored === null) {
+            $this->detectReuse($refreshToken);
+            return null;
+        }
+
+        $user = $this->users->findById((int) $stored['user_id']);
+        if ($user === null) {
+            return null;
+        }
+
+        $this->refreshTokens->revoke($refreshToken);
+
+        return $this->issueTokenPair($user);
+    }
+
+    /** Revoca el refresh token para que no pueda volver a usarse. */
+    public function logout(string $refreshToken): void
+    {
+        $this->refreshTokens->revoke($refreshToken);
+    }
+
+    /**
+     * Detección de reuso: si el token existe pero está revocado, alguien
+     * está reutilizando un token ya rotado — se revoca toda la familia.
+     */
+    private function detectReuse(string $refreshToken): void
+    {
+        $stored = $this->refreshTokens->find($refreshToken);
+        if ($stored !== null && (int) $stored['revoked'] === 1) {
+            $this->refreshTokens->revokeAllForUser((int) $stored['user_id']);
+            error_log(sprintf(
+                'Reuso de refresh token detectado (user_id=%d): se revocaron todas sus sesiones',
+                (int) $stored['user_id'],
+            ));
+        }
+    }
+
+    private function issueTokenPair(array $user): array
+    {
+        // Mantenimiento oportunista: eliminar tokens ya expirados.
+        $this->refreshTokens->purgeExpired();
+
+        $accessToken = $this->jwt->create([
+            'sub' => (string) $user['id'],
+            'username' => $user['username'],
+            'role' => $user['role'],
+        ]);
+
+        $refreshToken = $this->refreshTokens->create((int) $user['id'], $this->refreshTokenTtl);
+
+        return [
+            'access_token' => $accessToken,
+            'refresh_token' => $refreshToken,
+            'token_type' => 'Bearer',
+            'expires_in' => $this->accessTokenTtl,
+        ];
+    }
+}

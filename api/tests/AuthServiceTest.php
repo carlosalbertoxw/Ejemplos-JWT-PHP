@@ -1,0 +1,112 @@
+<?php
+
+declare(strict_types=1);
+
+use Api\Core\AuthService;
+use Api\Core\JwtService;
+use Api\Core\PasswordHasher;
+use Api\Data\Database;
+use Api\Data\RefreshTokenRepository;
+use Api\Data\UserRepository;
+
+/**
+ * Pruebas del flujo de autenticación completo contra una base SQLite en
+ * memoria (con los usuarios semilla admin/user): login, rotación de
+ * refresh tokens, detección de reuso y logout.
+ */
+final class AuthServiceTest extends TestCase
+{
+    private AuthService $auth;
+    private JwtService $jwt;
+    private RefreshTokenRepository $refreshTokens;
+
+    protected function setUp(): void
+    {
+        // Base en memoria: Database crea el esquema y siembra admin/user.
+        $pdo = (new Database(':memory:'))->pdo();
+
+        $this->jwt = new JwtService('secreto-de-pruebas', 'iss', 'aud', 900);
+        $this->refreshTokens = new RefreshTokenRepository($pdo);
+
+        $this->auth = new AuthService(
+            new UserRepository($pdo),
+            $this->refreshTokens,
+            $this->jwt,
+            new PasswordHasher(),
+            900,
+            3600,
+        );
+    }
+
+    public function testLoginConCredencialesValidasEmiteElParDeTokens(): void
+    {
+        $tokens = $this->auth->login('admin', 'Admin123!');
+
+        $this->assertNotNull($tokens);
+        $this->assertSame('Bearer', $tokens['token_type']);
+        $this->assertSame(900, $tokens['expires_in']);
+
+        // El access token es un JWT válido con los claims del usuario.
+        $claims = $this->jwt->verify($tokens['access_token']);
+        $this->assertSame('admin', $claims['username']);
+        $this->assertSame('Admin', $claims['role']);
+
+        // El refresh token emitido es canjeable.
+        $this->assertNotNull($this->refreshTokens->findValid($tokens['refresh_token']));
+    }
+
+    public function testLoginConPasswordIncorrectaDevuelveNull(): void
+    {
+        $this->assertNull($this->auth->login('admin', 'incorrecta'));
+    }
+
+    public function testLoginConUsuarioInexistenteDevuelveNull(): void
+    {
+        $this->assertNull($this->auth->login('no-existe', 'Admin123!'));
+    }
+
+    public function testRefreshRotaElToken(): void
+    {
+        $first = $this->auth->login('user', 'User123!');
+
+        $second = $this->auth->refresh($first['refresh_token']);
+
+        $this->assertNotNull($second, 'Un refresh token válido debe renovarse');
+        $this->assertTrue(
+            $first['refresh_token'] !== $second['refresh_token'],
+            'La rotación debe emitir un refresh token distinto',
+        );
+
+        // El token usado quedó revocado: un segundo canje falla.
+        $this->assertNull($this->auth->refresh($first['refresh_token']));
+    }
+
+    public function testElReusoDeUnTokenRotadoRevocaTodasLasSesionesDelUsuario(): void
+    {
+        $first = $this->auth->login('user', 'User123!');
+        $second = $this->auth->refresh($first['refresh_token']);
+
+        // Reuso del token ya rotado (escenario de robo): falla…
+        $this->assertNull($this->auth->refresh($first['refresh_token']));
+
+        // …y además revoca la familia completa: el token "bueno" tampoco sirve ya.
+        $this->assertNull(
+            $this->auth->refresh($second['refresh_token']),
+            'Tras detectar reuso deben revocarse todos los tokens del usuario',
+        );
+    }
+
+    public function testLogoutRevocaElRefreshToken(): void
+    {
+        $tokens = $this->auth->login('admin', 'Admin123!');
+
+        $this->auth->logout($tokens['refresh_token']);
+
+        $this->assertNull($this->auth->refresh($tokens['refresh_token']));
+    }
+
+    public function testUnRefreshTokenDesconocidoNoRenueva(): void
+    {
+        $this->assertNull($this->auth->refresh(bin2hex(random_bytes(32))));
+    }
+}

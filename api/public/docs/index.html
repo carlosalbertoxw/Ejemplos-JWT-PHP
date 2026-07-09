@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentación · API de ejemplo JWT en PHP puro</title>
+    <!--
+        Swagger UI desde CDN, con la versión FIJADA y Subresource Integrity:
+        si el CDN sirviera un archivo alterado (o cambiara de versión), el
+        navegador lo rechazaría. La especificación (openapi.json) la sirve
+        esta misma API.
+    -->
+    <link rel="stylesheet"
+          href="https://unpkg.com/swagger-ui-dist@5.32.8/swagger-ui.css"
+          integrity="sha384-9Q2fpS+xeS4ffJy6CagnwoUl+4ldAYhOs9pgZuEKxypVModhmZFzeMlvVsAjf7uT"
+          crossorigin="anonymous">
+</head>
+<body>
+<div id="swagger-ui"></div>
+
+<script src="https://unpkg.com/swagger-ui-dist@5.32.8/swagger-ui-bundle.js"
+        integrity="sha384-IKpAWwsTL0pcw7/Amtnt2eXF4P1BK64WNuY2E/RG15SWLUW5HXzFuyqCSAr/DP8C"
+        crossorigin="anonymous"></script>
+<script>
+    window.onload = () => {
+        SwaggerUIBundle({
+            url: '/openapi.json',
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            // Recordar el token del botón "Authorize" al recargar la página
+            persistAuthorization: true,
+            tryItOutEnabled: true,
+        });
+    };
+</script>
+</body>
+</html>

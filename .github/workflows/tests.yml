@@ -1,0 +1,24 @@
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Verificar sintaxis de todos los archivos PHP
+        run: |
+          find api webapp -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+          echo "Sintaxis OK"
+
+      - name: Ejecutar pruebas unitarias
+        run: php api/tests/run.php

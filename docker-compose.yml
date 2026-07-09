@@ -1,0 +1,33 @@
+services:
+  # API REST (emisión y validación de JWT)
+  api:
+    build: ./api
+    ports:
+      - "8000:80"            # http://localhost:8000
+    environment:
+      # Los valores se pueden sobrescribir con un archivo .env en la raíz
+      # (ver .env.example). El default permite arrancar el ejemplo sin
+      # configurar nada, pero NUNCA debe llegar así a producción.
+      JWT_SECRET: "${JWT_SECRET:-cambia-esta-clave-por-una-larga-y-aleatoria}"
+      JWT_ISSUER: "${JWT_ISSUER:-jwt-api-php}"
+      JWT_AUDIENCE: "${JWT_AUDIENCE:-jwt-webapp-php}"
+      ACCESS_TOKEN_TTL: "${ACCESS_TOKEN_TTL:-900}"        # 15 minutos
+      REFRESH_TOKEN_TTL: "${REFRESH_TOKEN_TTL:-604800}"   # 7 días
+      RATE_LIMIT_MAX_ATTEMPTS: "${RATE_LIMIT_MAX_ATTEMPTS:-5}"
+      RATE_LIMIT_WINDOW_SECONDS: "${RATE_LIMIT_WINDOW_SECONDS:-900}"
+    volumes:
+      - api-data:/var/www/html/data   # persiste la base SQLite
+
+  # Aplicación web (consume la API)
+  webapp:
+    build: ./webapp
+    ports:
+      - "8080:80"            # http://localhost:8080
+    environment:
+      # Dentro de la red de compose, la API se resuelve por su nombre de servicio
+      API_URL: "http://api"
+    depends_on:
+      - api
+
+volumes:
+  api-data:

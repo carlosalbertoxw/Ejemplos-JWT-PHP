@@ -1,0 +1,355 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "API de ejemplo JWT en PHP puro",
+    "description": "API REST educativa de autenticación con JSON Web Tokens: login con par de tokens (access + refresh), renovación con rotación de refresh tokens, logout con revocación y autorización por roles.\n\n**Usuarios de prueba:** `admin / Admin123!` (rol Admin) y `user / User123!` (rol User).\n\nPara probar los endpoints protegidos: haz login, copia el `access_token` de la respuesta y pégalo en el botón **Authorize** (sin el prefijo `Bearer`).",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Este mismo servidor"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Autenticación",
+      "description": "Emisión, renovación y revocación de tokens"
+    },
+    {
+      "name": "Productos",
+      "description": "Recurso de ejemplo: el catálogo público muestra todos los productos pero oculta el precio; el precio solo se expone con token"
+    }
+  ],
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Autenticación"],
+        "summary": "Iniciar sesión",
+        "description": "Valida las credenciales y devuelve un access token de corta vida y un refresh token de larga vida.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" },
+              "example": { "username": "admin", "password": "Admin123!" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credenciales válidas: par de tokens emitido",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TokenPair" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": {
+            "description": "Credenciales inválidas",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": ["Autenticación"],
+        "summary": "Renovar el par de tokens",
+        "description": "Canjea un refresh token válido por un nuevo par de tokens. El refresh token usado se **revoca en el acto** (rotación): si se reutiliza, la petición falla con 401.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Nuevo par de tokens emitido; el refresh token anterior queda revocado",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TokenPair" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": {
+            "description": "Refresh token inválido, expirado o revocado. Si el token ya fue rotado (posible robo), se revocan todas las sesiones del usuario.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": ["Autenticación"],
+        "summary": "Cerrar sesión",
+        "description": "Revoca el refresh token indicado: la sesión ya no podrá renovarse.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Refresh token revocado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string", "example": "Sesión cerrada" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["Autenticación"],
+        "summary": "Datos del usuario autenticado",
+        "description": "Devuelve los claims que la API extrae del access token recibido.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Claims del token",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Me" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/products/public": {
+      "get": {
+        "tags": ["Productos"],
+        "summary": "Catálogo público",
+        "description": "Todos los productos, pero **sin el precio**: ese dato solo se expone en el endpoint autenticado.",
+        "responses": {
+          "200": {
+            "description": "Listado de productos sin precio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/PublicProduct" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products": {
+      "get": {
+        "tags": ["Productos"],
+        "summary": "Listado completo de productos",
+        "description": "Los mismos productos del catálogo público, pero **incluyendo el precio**. Requiere un access token válido (cualquier rol).",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Listado completo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Product" }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["Productos"],
+        "summary": "Crear un producto",
+        "description": "Requiere que el claim `role` del access token sea `Admin`. Con el usuario `user` responde 403.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NewProduct" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Producto creado",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Product" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": {
+            "description": "El token es válido pero no tiene el rol Admin",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Access token obtenido en /api/auth/login. Pega solo el token, sin el prefijo \"Bearer\"."
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Falta un campo obligatorio o tiene un formato inválido",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Falta el token o es inválido (firma, expiración, emisor…)",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "Demasiados intentos fallidos: espera los segundos indicados en el encabezado Retry-After",
+        "headers": {
+          "Retry-After": {
+            "description": "Segundos hasta poder reintentar",
+            "schema": { "type": "integer", "example": 900 }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "LoginRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "example": "admin" },
+          "password": { "type": "string", "format": "password", "example": "Admin123!" }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "required": ["refresh_token"],
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "description": "Refresh token vigente (64 caracteres hexadecimales)"
+          }
+        }
+      },
+      "TokenPair": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "JWT HS256 de corta vida; se envía como Authorization: Bearer"
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "Token opaco de larga vida para renovar el access token"
+          },
+          "token_type": { "type": "string", "example": "Bearer" },
+          "expires_in": {
+            "type": "integer",
+            "description": "Segundos de vida del access token",
+            "example": 900
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "example": "1" },
+          "username": { "type": "string", "example": "admin" },
+          "role": { "type": "string", "example": "Admin" },
+          "token_expires_at": {
+            "type": "integer",
+            "description": "Expiración del access token (timestamp Unix)",
+            "example": 1783566819
+          }
+        }
+      },
+      "PublicProduct": {
+        "type": "object",
+        "description": "Vista pública del producto: sin precio",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "name": { "type": "string", "example": "Teclado mecánico" },
+          "description": { "type": "string", "example": "Switches rojos, retroiluminado" }
+        }
+      },
+      "Product": {
+        "description": "Vista autenticada del producto: incluye el precio",
+        "allOf": [
+          { "$ref": "#/components/schemas/PublicProduct" },
+          {
+            "type": "object",
+            "properties": {
+              "price": { "type": "number", "format": "float", "example": 89.99 }
+            }
+          }
+        ]
+      },
+      "NewProduct": {
+        "type": "object",
+        "required": ["name", "price"],
+        "properties": {
+          "name": { "type": "string", "example": "Webcam 4K" },
+          "description": { "type": "string", "example": "Enfoque automático, micrófono integrado" },
+          "price": { "type": "number", "format": "float", "minimum": 0, "example": 75.5 }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "example": "Credenciales inválidas" }
+        }
+      }
+    }
+  }
+}
