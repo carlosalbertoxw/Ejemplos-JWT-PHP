@@ -41,17 +41,36 @@ El proyecto se divide en dos partes independientes:
 - Persistencia en **SQLite** (se crea y siembra sola en el primer arranque;
   modo WAL para tolerar peticiones concurrentes).
 
-## Cómo ejecutarlo
+## Cómo ejecutarlo (Docker)
 
-Requiere Docker. En la raíz del proyecto:
+Requiere Docker (Desktop en Windows/Mac). En la raíz del proyecto:
 
 ```bash
 docker compose up --build
 ```
 
+Esto construye las dos imágenes (`api/Dockerfile` y `webapp/Dockerfile`) y
+levanta ambos contenedores. La base SQLite se crea y siembra sola en el
+primer arranque:
+
 - Aplicación web: **http://localhost:8080**
 - API (para probar directo con curl/Postman): **http://localhost:8000**
 - Documentación interactiva (Swagger UI): **http://localhost:8000/docs**
+
+Comandos útiles del día a día:
+
+```bash
+docker compose up -d --build   # arrancar en segundo plano
+docker compose up -d           # volver a arrancar sin reconstruir (si no cambió el código)
+docker compose logs -f api     # seguir los logs de la API (avisos de rate limiting, reuso de tokens…)
+docker compose down            # detener y eliminar los contenedores
+docker compose down -v         # además borra el volumen de datos: la base se resiembra al arrancar
+```
+
+> La base de datos vive en el volumen `api-data`, así que sobrevive a
+> `docker compose down`; usa `down -v` para empezar de cero. Si defines un
+> archivo `.env` en la raíz (ver [`.env.example`](.env.example)), compose lo
+> carga automáticamente.
 
 Usuarios de prueba:
 
