@@ -1,7 +1,10 @@
 name: Pruebas
 
 on:
+  # push solo en master: en las ramas de los PR ya corre por pull_request
+  # (si no, cada PR ejecutaría el workflow dos veces).
   push:
+    branches: [master]
   pull_request:
 
 permissions:
@@ -32,3 +35,22 @@ jobs:
 
       - name: Validar el contrato OpenAPI
         run: npx --yes @redocly/cli@2 lint api/public/openapi.json
+
+  docker:
+    # Construye las imágenes y levanta el stack con docker compose. Así se
+    # prueban de verdad los Dockerfiles (y los PR de Dependabot que cambian sus
+    # imágenes base) y que los health checks respondan.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Construir y levantar
+        run: docker compose up --build --detach --wait --wait-timeout 300
+
+      - name: Logs de los contenedores
+        if: failure()
+        run: docker compose logs
+
+      - name: Detener
+        if: always()
+        run: docker compose down --volumes
