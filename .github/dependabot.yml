@@ -1,0 +1,11 @@
+# Propone actualizaciones de las imágenes base y de las GitHub Actions.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directories: ["/api", "/webapp"]
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

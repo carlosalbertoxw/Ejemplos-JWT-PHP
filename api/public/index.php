@@ -28,9 +28,9 @@ use Api\Http\Request;
 use Api\Http\Response;
 use Api\Http\Router;
 
-$config = require __DIR__ . '/../config/config.php';
-
 try {
+    $config = require __DIR__ . '/../config/config.php';
+
     // --- Composición de dependencias (inyección manual) ---
     $database = new Database($config['db_path']);
     $pdo = $database->pdo();
@@ -51,17 +51,27 @@ try {
         $config['refresh_token_ttl'],
     );
 
-    $rateLimiter = new RateLimiter(
-        new RateLimitRepository($pdo),
+    // Dos límites sobre la misma tabla: por cuenta y por IP (ver config.php).
+    $attempts = new RateLimitRepository($pdo);
+    $accountLimiter = new RateLimiter(
+        $attempts,
         $config['rate_limit_max_attempts'],
         $config['rate_limit_window_seconds'],
     );
+    $ipLimiter = new RateLimiter(
+        $attempts,
+        $config['rate_limit_ip_max_attempts'],
+        $config['rate_limit_window_seconds'],
+    );
 
-    $authController = new AuthController($authService, $rateLimiter);
+    $authController = new AuthController($authService, $accountLimiter, $ipLimiter);
     $productController = new ProductController(new ProductRepository($pdo));
 
     // --- Rutas ---
     $router = new Router($jwt);
+
+    // Liveness: solo confirma que PHP responde (lo usa el healthcheck de Docker).
+    $router->add('GET', '/health', fn (Request $r) => Response::json(['status' => 'ok']));
 
     $router->add('GET', '/', fn (Request $r) => Response::json([
         'name' => 'API de ejemplo JWT en PHP puro',
@@ -69,7 +79,7 @@ try {
         'endpoints' => [
             'POST /api/auth/login',
             'POST /api/auth/refresh',
-            'POST /api/auth/logout   (Bearer)',
+            'POST /api/auth/logout',
             'GET  /api/auth/me       (Bearer)',
             'GET  /api/products/public',
             'GET  /api/products      (Bearer)',
@@ -79,7 +89,9 @@ try {
 
     $router->add('POST', '/api/auth/login', [$authController, 'login']);
     $router->add('POST', '/api/auth/refresh', [$authController, 'refresh']);
-    $router->add('POST', '/api/auth/logout', [$authController, 'logout'], Access::Auth);
+    // El logout es público: el refresh token del cuerpo es la credencial. Así
+    // el cliente no necesita un access token vigente (ni renovarlo) para salir.
+    $router->add('POST', '/api/auth/logout', [$authController, 'logout']);
     $router->add('GET', '/api/auth/me', [$authController, 'me'], Access::Auth);
 
     $router->add('GET', '/api/products/public', [$productController, 'publicList']);

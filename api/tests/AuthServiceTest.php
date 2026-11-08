@@ -25,7 +25,7 @@ final class AuthServiceTest extends TestCase
         // Base en memoria: Database crea el esquema y siembra admin/user.
         $pdo = (new Database(':memory:'))->pdo();
 
-        $this->jwt = new JwtService('secreto-de-pruebas', 'iss', 'aud', 900);
+        $this->jwt = new JwtService('secreto-de-pruebas-de-al-menos-32-bytes', 'iss', 'aud', 900);
         $this->refreshTokens = new RefreshTokenRepository($pdo);
 
         $this->auth = new AuthService(
@@ -51,8 +51,10 @@ final class AuthServiceTest extends TestCase
         $this->assertSame('admin', $claims['username']);
         $this->assertSame('Admin', $claims['role']);
 
-        // El refresh token emitido es canjeable.
-        $this->assertNotNull($this->refreshTokens->findValid($tokens['refresh_token']));
+        // El refresh token emitido quedó guardado y vigente.
+        $stored = $this->refreshTokens->find($tokens['refresh_token']);
+        $this->assertNotNull($stored);
+        $this->assertSame(0, (int) $stored['revoked']);
     }
 
     public function testLoginConPasswordIncorrectaDevuelveNull(): void
@@ -103,6 +105,34 @@ final class AuthServiceTest extends TestCase
         $this->auth->logout($tokens['refresh_token']);
 
         $this->assertNull($this->auth->refresh($tokens['refresh_token']));
+    }
+
+    public function testLogoutSoloCierraLaSesionDelTokenEnviado(): void
+    {
+        // Dos sesiones del mismo usuario (p. ej. dos dispositivos).
+        $phone = $this->auth->login('user', 'User123!');
+        $laptop = $this->auth->login('user', 'User123!');
+
+        $this->auth->logout($phone['refresh_token']);
+
+        $this->assertSame(1, (int) $this->refreshTokens->find($phone['refresh_token'])['revoked']);
+        $this->assertNotNull(
+            $this->auth->refresh($laptop['refresh_token']),
+            'La otra sesión debe seguir activa tras el logout',
+        );
+
+        // Reusar el token ya cerrado se trata como robo: revoca todo.
+        $this->assertNull($this->auth->refresh($phone['refresh_token']));
+    }
+
+    public function testElCanjeEsAtomicoSoloUnoDeDosUsosGana(): void
+    {
+        $tokens = $this->auth->login('user', 'User123!');
+
+        // Simula dos peticiones simultáneas: la base serializa los UPDATE y
+        // solo el primero cambia la fila.
+        $this->assertTrue($this->refreshTokens->consume($tokens['refresh_token']));
+        $this->assertFalse($this->refreshTokens->consume($tokens['refresh_token']));
     }
 
     public function testUnRefreshTokenDesconocidoNoRenueva(): void

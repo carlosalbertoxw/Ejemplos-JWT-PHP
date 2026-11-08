@@ -1,5 +1,5 @@
-# Aplicación web de ejemplo JWT — PHP 8.3 + Apache
-FROM php:8.3-apache
+# Aplicación web de ejemplo JWT — PHP 8.5 + Apache
+FROM php:8.5-apache
 
 # Servir desde public/ (el resto del código queda fuera del document root)
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public

@@ -19,26 +19,32 @@ final class RefreshTokenRepository
     {
         $token = bin2hex(random_bytes(32)); // 64 caracteres hex, imposible de adivinar
         $stmt = $this->pdo->prepare(
-            'INSERT INTO refresh_tokens (token_hash, user_id, expires_at, created_at)
-             VALUES (?, ?, ?, ?)'
+            'INSERT INTO refresh_tokens (token_hash, user_id, expires_at) VALUES (?, ?, ?)'
         );
-        $stmt->execute([$this->hash($token), $userId, time() + $ttlSeconds, time()]);
+        $stmt->execute([$this->hash($token), $userId, time() + $ttlSeconds]);
         return $token;
     }
 
-    /** Devuelve el registro solo si existe, no está revocado y no expiró. */
-    public function findValid(string $token): ?array
+    /**
+     * Canjea el token: lo marca como revocado solo si seguía vigente.
+     *
+     * Comprobar y revocar en UNA sentencia es lo que hace la rotación
+     * atómica: si dos peticiones llegan a la vez con el mismo token, la base
+     * de datos serializa los UPDATE y solo uno cambia la fila (rowCount 1).
+     * Con un SELECT seguido de un UPDATE, ambas pasarían la comprobación y
+     * obtendrían dos pares válidos, saltándose la detección de reuso.
+     */
+    public function consume(string $token): bool
     {
         $stmt = $this->pdo->prepare(
-            'SELECT * FROM refresh_tokens
+            'UPDATE refresh_tokens SET revoked = 1
              WHERE token_hash = ? AND revoked = 0 AND expires_at > ?'
         );
         $stmt->execute([$this->hash($token), time()]);
-        $row = $stmt->fetch();
-        return $row === false ? null : $row;
+        return $stmt->rowCount() === 1;
     }
 
-    /** Devuelve el registro sin filtrar estado (para detectar reuso), o null. */
+    /** Devuelve el registro sin filtrar por estado, o null. */
     public function find(string $token): ?array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM refresh_tokens WHERE token_hash = ?');

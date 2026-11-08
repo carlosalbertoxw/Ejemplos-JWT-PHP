@@ -10,6 +10,13 @@
 
 require __DIR__ . '/../src/bootstrap.php';
 
+/**
+ * Servicios creados en bootstrap.php:
+ * @var \WebApp\Auth\TokenStore $tokenStore
+ * @var \WebApp\Api\AuthApiClient $authClient
+ * @var \WebApp\Api\ProductsApiClient $productsClient
+ */
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /index.php');
     exit;

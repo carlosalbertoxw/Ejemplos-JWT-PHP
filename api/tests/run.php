@@ -40,7 +40,6 @@ foreach ($testClasses as $class) {
         try {
             /** @var TestCase $test */
             $test = new $class();
-            (new ReflectionMethod($test, 'setUp'))->setAccessible(true);
             (new ReflectionMethod($test, 'setUp'))->invoke($test);
             $test->$method();
             $passed++;

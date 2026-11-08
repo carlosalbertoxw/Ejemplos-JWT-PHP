@@ -23,6 +23,13 @@ final class JwtService
         private readonly string $audience,
         private readonly int $ttlSeconds,
     ) {
+        // HS256 con una clave corta se puede romper por fuerza bruta offline:
+        // el RFC 7518 exige una clave de al menos 256 bits (32 bytes).
+        if (strlen($secret) < JwtSecret::MIN_BYTES) {
+            throw new \InvalidArgumentException(
+                'La clave de firma debe tener al menos ' . JwtSecret::MIN_BYTES . ' bytes'
+            );
+        }
     }
 
     /**

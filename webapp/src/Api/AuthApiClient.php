@@ -46,7 +46,11 @@ final class AuthApiClient
     {
         $refreshToken = $this->tokens->refreshToken();
         if ($refreshToken !== null) {
-            $this->http->authenticatedRequest('POST', '/api/auth/logout', [
+            // Petición sin access token: el refresh token es la credencial.
+            // Si fuera por el canal autenticado y el access token hubiera
+            // expirado, el reintento tras el refresh revocaría el token viejo
+            // y dejaría vivo el recién emitido.
+            $this->http->request('POST', '/api/auth/logout', [
                 'refresh_token' => $refreshToken,
             ]);
         }

@@ -91,7 +91,6 @@ final class ApiHttpClient
         $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         $errno = curl_errno($curl);
         $error = curl_error($curl);
-        curl_close($curl);
 
         if ($errno !== 0) {
             // La API no respondió (contenedor caído, red, etc.).

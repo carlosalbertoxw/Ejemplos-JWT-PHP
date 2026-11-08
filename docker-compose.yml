@@ -6,17 +6,26 @@ services:
       - "8000:80"            # http://localhost:8000
     environment:
       # Los valores se pueden sobrescribir con un archivo .env en la raíz
-      # (ver .env.example). El default permite arrancar el ejemplo sin
-      # configurar nada, pero NUNCA debe llegar así a producción.
-      JWT_SECRET: "${JWT_SECRET:-cambia-esta-clave-por-una-larga-y-aleatoria}"
+      # (ver .env.example). Si JWT_SECRET queda vacía, la API genera una
+      # clave de desarrollo y la guarda en el volumen de datos; con
+      # APP_ENV=production exige que se defina.
+      APP_ENV: "${APP_ENV:-development}"
+      JWT_SECRET: "${JWT_SECRET:-}"
       JWT_ISSUER: "${JWT_ISSUER:-jwt-api-php}"
       JWT_AUDIENCE: "${JWT_AUDIENCE:-jwt-webapp-php}"
       ACCESS_TOKEN_TTL: "${ACCESS_TOKEN_TTL:-900}"        # 15 minutos
       REFRESH_TOKEN_TTL: "${REFRESH_TOKEN_TTL:-604800}"   # 7 días
       RATE_LIMIT_MAX_ATTEMPTS: "${RATE_LIMIT_MAX_ATTEMPTS:-5}"
+      RATE_LIMIT_IP_MAX_ATTEMPTS: "${RATE_LIMIT_IP_MAX_ATTEMPTS:-20}"
       RATE_LIMIT_WINDOW_SECONDS: "${RATE_LIMIT_WINDOW_SECONDS:-900}"
     volumes:
-      - api-data:/var/www/html/data   # persiste la base SQLite
+      - api-data:/var/www/html/data   # persiste la base SQLite y la clave de desarrollo
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   # Aplicación web (consume la API)
   webapp:
@@ -27,7 +36,8 @@ services:
       # Dentro de la red de compose, la API se resuelve por su nombre de servicio
       API_URL: "http://api"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   api-data:

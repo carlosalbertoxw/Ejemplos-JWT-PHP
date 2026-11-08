@@ -4,21 +4,31 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Instalar PHP 8.3
+      - name: Instalar PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
+          tools: phpstan:2.3
 
       - name: Verificar sintaxis de todos los archivos PHP
         run: |
           find api webapp -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
           echo "Sintaxis OK"
 
+      - name: Análisis estático (PHPStan)
+        run: phpstan analyse --no-progress
+
       - name: Ejecutar pruebas unitarias
         run: php api/tests/run.php
+
+      - name: Validar el contrato OpenAPI
+        run: npx --yes @redocly/cli@2 lint api/public/openapi.json

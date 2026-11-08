@@ -20,24 +20,36 @@ El proyecto se divide en dos partes independientes:
   reuso**: cada uso lo revoca y emite uno nuevo; si alguien reutiliza un token
   ya rotado (señal de robo), se revocan **todas** las sesiones del usuario.
   Se almacena hasheado (SHA-256) en la base de datos.
-- **Logout real**: revoca el refresh token en el servidor.
+- **Logout real**: revoca en el servidor el refresh token de esa sesión (las
+  de otros dispositivos siguen activas). Es público: el refresh token es la
+  credencial, así que salir no requiere un access token vigente.
 - **Autorización por roles**: endpoint de creación de productos solo para `Admin`.
 - **Datos según nivel de acceso**: el catálogo público muestra los productos
   sin precio; el precio solo se expone en el endpoint autenticado.
 - **Contraseñas con bcrypt** (`password_hash` / `password_verify`), con
   verificación contra un hash señuelo cuando el usuario no existe (el tiempo
   de respuesta no revela qué usuarios existen).
-- **Rate limiting anti fuerza bruta** en login y refresh: tras 5 intentos
-  fallidos en 15 minutos responde `429` con encabezado `Retry-After`
+- **Rate limiting anti fuerza bruta** en login y refresh: el login limita
+  los fallos **por cuenta** (5 en 15 minutos, aunque el atacante cambie de
+  IP) y **por IP** (20 en 15 minutos, contra el *password spraying*); el
+  refresh, por IP. Al superarlos responde `429` con encabezado `Retry-After`
   (configurable por variables de entorno).
+- **Rotación atómica**: el refresh token se comprueba y revoca en una sola
+  sentencia `UPDATE`, de modo que dos peticiones simultáneas con el mismo
+  token no pueden obtener dos pares válidos.
+- **Sin claves versionadas**: si `JWT_SECRET` no está definida, en desarrollo
+  se genera una clave aleatoria y se guarda en `api/data/` (fuera de git);
+  con `APP_ENV=production` la API no arranca sin ella.
 - **Renovación transparente en la web**: ante un `401`, el cliente HTTP renueva
   el token y reintenta la petición sin que el usuario lo note.
 - **Webapp endurecida**: cookie de sesión `HttpOnly` + `SameSite=Lax`,
   regeneración del ID de sesión al iniciar sesión, tokens anti-CSRF en todos
   los formularios (el logout es un POST) y cabeceras de seguridad
   (`CSP`, `X-Frame-Options`, `X-Content-Type-Options`…).
-- **Pruebas unitarias sin dependencias** (31 tests) del JWT, el flujo de
-  autenticación, el rate limiter y el router, con CI en GitHub Actions.
+- **Pruebas unitarias sin dependencias** (41 tests) del JWT, el flujo de
+  autenticación, el rate limiter, el controlador de auth y el router, con CI
+  en GitHub Actions (más análisis estático con PHPStan y validación del
+  contrato OpenAPI).
 - Persistencia en **SQLite** (se crea y siembra sola en el primer arranque;
   modo WAL para tolerar peticiones concurrentes).
 
@@ -85,11 +97,12 @@ Usuarios de prueba:
 |---|---|---|---|
 | POST | `/api/auth/login` | Público | Valida credenciales y devuelve el par de tokens (429 tras varios fallos) |
 | POST | `/api/auth/refresh` | Público | Rota el refresh token y devuelve un nuevo par (429 tras varios fallos) |
-| POST | `/api/auth/logout` | Bearer | Revoca el refresh token |
+| POST | `/api/auth/logout` | Público | Revoca el refresh token enviado (cierra esa sesión) |
 | GET | `/api/auth/me` | Bearer | Devuelve los claims del token |
 | GET | `/api/products/public` | Público | Catálogo público (**oculta el precio**) |
 | GET | `/api/products` | Bearer | Listado completo (**incluye el precio**) |
 | POST | `/api/products` | Bearer + rol Admin | Crea un producto |
+| GET | `/health` | Público | Liveness (lo usa el healthcheck de Docker) |
 
 ### Documentación interactiva (Swagger)
 
@@ -143,15 +156,18 @@ api/
 │   ├── JwtServiceTest.php
 │   ├── AuthServiceTest.php
 │   ├── RateLimiterTest.php
+│   ├── AuthControllerTest.php
+│   ├── JwtSecretTest.php
 │   └── RouterTest.php
 └── src/
     ├── Core/             # Lógica de autenticación (sin HTTP)
     │   ├── JwtService.php        # Crea/valida JWT HS256 a mano
     │   ├── AuthService.php       # Login, rotación + detección de reuso, logout
     │   ├── RateLimiter.php       # Límite de intentos (ventana deslizante)
+    │   ├── JwtSecret.php         # Clave JWT: variable de entorno o generada en dev
     │   └── PasswordHasher.php    # bcrypt
     ├── Data/             # Acceso a datos (SQLite vía PDO)
-    │   ├── Database.php          # Conexión + esquema + datos semilla
+    │   ├── Database.php          # Conexión + esquema (y su migración) + datos semilla
     │   ├── UserRepository.php
     │   ├── RefreshTokenRepository.php
     │   ├── RateLimitRepository.php
@@ -202,8 +218,8 @@ llega al navegador.
 4. **Detección de robo** — si alguien presenta un refresh token que ya fue
    rotado (solo puede pasar si el token se usó dos veces: robo), la API revoca
    **todas** las sesiones de ese usuario y lo registra en el log.
-5. **Logout** — la web llama a `POST /api/auth/logout` y la API revoca el
-   refresh token: ya no se puede renovar la sesión.
+5. **Logout** — la web llama a `POST /api/auth/logout` con el refresh token
+   (sin access token) y la API lo revoca: esa sesión ya no se puede renovar.
 
 ## Pruebas
 
@@ -217,12 +233,16 @@ de login/rotación/reuso/logout, el rate limiter y el router.
 php api/tests/run.php
 
 # O con Docker, sin instalar PHP
-docker run --rm -v "$PWD/api:/app" -w /app php:8.3-cli php tests/run.php
+docker run --rm -v "$PWD/api:/app" -w /app php:8.5-cli php tests/run.php
 ```
 
 También corren en CI en cada push (GitHub Actions: `.github/workflows/tests.yml`).
 
 ## Configuración
+
+El contrato de la API ([`api/public/openapi.json`](api/public/openapi.json))
+es el mismo que implementan los ejemplos en Java y .NET, así que la app web
+o la app Android pueden usarse contra cualquiera de las tres APIs.
 
 Todos los valores se leen de variables de entorno (ver
 [`.env.example`](.env.example)); docker compose carga automáticamente un
@@ -230,15 +250,17 @@ archivo `.env` en la raíz si existe. Destacan:
 
 | Variable | Default | Qué controla |
 |---|---|---|
-| `JWT_SECRET` | clave de desarrollo (avisa en el log) | Firma de los JWT |
+| `APP_ENV` | `development` | Con `production`, `JWT_SECRET` es obligatoria |
+| `JWT_SECRET` | se genera en `api/data/jwt-secret` | Firma de los JWT (≥ 32 bytes) |
 | `ACCESS_TOKEN_TTL` | `900` (15 min) | Vida del access token |
 | `REFRESH_TOKEN_TTL` | `604800` (7 días) | Vida del refresh token |
-| `RATE_LIMIT_MAX_ATTEMPTS` | `5` | Intentos fallidos permitidos |
+| `RATE_LIMIT_MAX_ATTEMPTS` | `5` | Intentos fallidos permitidos por cuenta |
+| `RATE_LIMIT_IP_MAX_ATTEMPTS` | `20` | Intentos fallidos permitidos por IP |
 | `RATE_LIMIT_WINDOW_SECONDS` | `900` | Ventana del rate limiting |
 
 ## Ejecución sin Docker (opcional)
 
-Con PHP 8.2+ instalado, en dos terminales:
+Con PHP 8.3+ instalado (las imágenes usan 8.5), en dos terminales:
 
 ```bash
 # Terminal 1 — API en el puerto 8000
@@ -248,10 +270,10 @@ cd api && php -S localhost:8000 -t public public/index.php
 cd webapp && php -S localhost:8080 -t public
 ```
 
-> Nota: este proyecto es educativo. Para producción, además de definir una
-> clave secreta robusta en `JWT_SECRET` (el default de desarrollo solo avisa
-> en el log), se debe servir todo por HTTPS (y activar el flag `secure` que
-> la cookie de sesión ya aplica automáticamente bajo HTTPS).
+> Nota: este proyecto es educativo. Para producción, además de definir
+> `APP_ENV=production` y una clave robusta en `JWT_SECRET`, se debe servir
+> todo por HTTPS (y activar el flag `secure` que la cookie de sesión ya
+> aplica automáticamente bajo HTTPS).
 
 ## Licencia
 

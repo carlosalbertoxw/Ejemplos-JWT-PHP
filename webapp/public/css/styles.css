@@ -132,8 +132,6 @@ th { background: #eff6ff; }
     color: var(--muted);
 }
 
-.badge-public { background: #dcfce7; color: var(--success); }
-
 form.panel {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -160,12 +158,6 @@ form.panel input[type="number"] {
     border: 1px solid var(--border);
     border-radius: 8px;
     font-size: 1rem;
-}
-
-form.panel .checkbox {
-    flex-direction: row;
-    align-items: center;
-    gap: .5rem;
 }
 
 button {

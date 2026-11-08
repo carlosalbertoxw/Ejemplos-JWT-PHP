@@ -57,23 +57,27 @@ final class AuthService
      */
     public function refresh(string $refreshToken): ?array
     {
-        $stored = $this->refreshTokens->findValid($refreshToken);
-        if ($stored === null) {
+        // Canje atómico: comprueba y revoca en una sola operación (ver
+        // RefreshTokenRepository::consume). Si falla, el token no existe,
+        // expiró o ya se había usado.
+        if (!$this->refreshTokens->consume($refreshToken)) {
             $this->detectReuse($refreshToken);
             return null;
         }
 
-        $user = $this->users->findById((int) $stored['user_id']);
+        $stored = $this->refreshTokens->find($refreshToken);
+        $user = $stored === null ? null : $this->users->findById((int) $stored['user_id']);
         if ($user === null) {
             return null;
         }
 
-        $this->refreshTokens->revoke($refreshToken);
-
         return $this->issueTokenPair($user);
     }
 
-    /** Revoca el refresh token para que no pueda volver a usarse. */
+    /**
+     * Revoca el refresh token para que no pueda volver a usarse (cierra solo
+     * la sesión a la que pertenece). Revocarlo dos veces no tiene efecto.
+     */
     public function logout(string $refreshToken): void
     {
         $this->refreshTokens->revoke($refreshToken);

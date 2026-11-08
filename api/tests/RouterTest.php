@@ -19,7 +19,7 @@ final class RouterTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->jwt = new JwtService('secreto-de-pruebas', 'iss', 'aud', 900);
+        $this->jwt = new JwtService('secreto-de-pruebas-de-al-menos-32-bytes', 'iss', 'aud', 900);
 
         $this->router = new Router($this->jwt);
         $this->router->add('GET', '/ping', fn (Request $r) => Response::json(['pong' => true]));

@@ -37,6 +37,7 @@ final class Database
         // El esquema usa IF NOT EXISTS: crearlo siempre es idempotente y
         // añade las tablas nuevas a bases creadas por versiones anteriores.
         $this->createSchema();
+        $this->migrate();
         if ($isNew) {
             $this->seed();
         }
@@ -62,8 +63,7 @@ final class Database
                 token_hash TEXT    NOT NULL UNIQUE,
                 user_id    INTEGER NOT NULL REFERENCES users(id),
                 expires_at INTEGER NOT NULL,
-                revoked    INTEGER NOT NULL DEFAULT 0,
-                created_at INTEGER NOT NULL
+                revoked    INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS products (
@@ -83,6 +83,19 @@ final class Database
             CREATE INDEX IF NOT EXISTS idx_rate_limit_key_time
                 ON rate_limit_attempts (attempt_key, attempted_at);
         SQL);
+    }
+
+    /**
+     * Ajusta bases creadas por versiones anteriores. La columna
+     * refresh_tokens.created_at nunca se leía y era NOT NULL sin valor por
+     * defecto: si siguiera existiendo, los INSERT actuales fallarían.
+     */
+    private function migrate(): void
+    {
+        $columns = $this->pdo->query('PRAGMA table_info(refresh_tokens)')->fetchAll();
+        if (in_array('created_at', array_column($columns, 'name'), true)) {
+            $this->pdo->exec('ALTER TABLE refresh_tokens DROP COLUMN created_at');
+        }
     }
 
     private function seed(): void

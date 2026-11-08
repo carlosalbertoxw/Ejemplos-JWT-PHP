@@ -12,7 +12,7 @@ use Api\Core\JwtService;
  */
 final class JwtServiceTest extends TestCase
 {
-    private const SECRET = 'secreto-de-pruebas';
+    private const SECRET = 'secreto-de-pruebas-de-al-menos-32-bytes';
     private const ISSUER = 'test-issuer';
     private const AUDIENCE = 'test-audience';
 
@@ -21,6 +21,14 @@ final class JwtServiceTest extends TestCase
     protected function setUp(): void
     {
         $this->jwt = new JwtService(self::SECRET, self::ISSUER, self::AUDIENCE, 900);
+    }
+
+    public function testRechazaUnaClaveDeMenosDe32Bytes(): void
+    {
+        $this->expectException(
+            \InvalidArgumentException::class,
+            fn () => new JwtService('corta', self::ISSUER, self::AUDIENCE, 900),
+        );
     }
 
     public function testCreaYVerificaUnTokenConSusClaims(): void
@@ -70,7 +78,7 @@ final class JwtServiceTest extends TestCase
 
     public function testRechazaUnTokenFirmadoConOtroSecreto(): void
     {
-        $otherService = new JwtService('otro-secreto', self::ISSUER, self::AUDIENCE, 900);
+        $otherService = new JwtService('otro-secreto-distinto-de-al-menos-32-bytes', self::ISSUER, self::AUDIENCE, 900);
         $token = $otherService->create(['sub' => '1']);
 
         $this->expectException(JwtException::class, fn () => $this->jwt->verify($token), 'Firma inválida');

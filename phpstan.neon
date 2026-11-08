@@ -1,0 +1,15 @@
+# Análisis estático (https://phpstan.org). Se ejecuta en CI con el phar
+# oficial, sin Composer, para mantener el proyecto en "PHP puro":
+#   php phpstan.phar analyse
+parameters:
+    level: 5
+    paths:
+        - api/src
+        - api/public/index.php
+        - api/config
+        - webapp/src
+        - webapp/public
+        - webapp/config
+    bootstrapFiles:
+        - api/src/autoload.php
+        - webapp/src/autoload.php
