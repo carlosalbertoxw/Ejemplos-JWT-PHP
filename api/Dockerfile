@@ -12,6 +12,15 @@ RUN sed -ri 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
         > /etc/apache2/conf-available/docroot.conf \
     && a2enconf docroot
 
+# Configuración de producción. Sin php.ini, PHP usa sus valores por defecto:
+# display_errors=On (un error mostraría rutas y trazas al cliente) y
+# expose_php=On (la versión exacta de PHP viaja en X-Powered-By). Apache
+# tampoco debe anunciar su versión ni la del sistema operativo.
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
+    && printf 'expose_php = Off\n' > "$PHP_INI_DIR/conf.d/zz-security.ini" \
+    && printf 'ServerTokens Prod\nServerSignature Off\n' > /etc/apache2/conf-available/zz-security.conf \
+    && a2enconf zz-security
+
 COPY . /var/www/html/
 
 # Carpeta de datos escribible para la base SQLite

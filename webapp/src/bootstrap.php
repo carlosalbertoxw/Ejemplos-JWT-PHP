@@ -38,6 +38,17 @@ function e(?string $text): string
     return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * Campo de un formulario POST como texto. Si llega como arreglo (p. ej.
+ * "username[]=x") se trata como vacío: pasarlo a trim() o a htmlspecialchars()
+ * lanzaría un TypeError y la página respondería con un error 500.
+ */
+function postString(string $key): string
+{
+    $value = $_POST[$key] ?? '';
+    return is_string($value) ? $value : '';
+}
+
 /** Exige sesión iniciada; si no la hay, redirige al login. */
 function requireLogin(WebApp\Auth\TokenStore $tokenStore): void
 {

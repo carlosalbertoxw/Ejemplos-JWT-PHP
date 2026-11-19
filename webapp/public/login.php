@@ -25,8 +25,8 @@ $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireValidCsrf();
 
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
+    $username = trim(postString('username'));
+    $password = postString('password');
 
     if ($username === '' || $password === '') {
         $error = 'Usuario y contraseña son obligatorios';
@@ -54,7 +54,7 @@ renderHeader('Iniciar sesión', null);
     <label>
         Usuario
         <input type="text" name="username" required
-               value="<?= e($_POST['username'] ?? '') ?>">
+               value="<?= e(postString('username')) ?>">
     </label>
     <label>
         Contraseña

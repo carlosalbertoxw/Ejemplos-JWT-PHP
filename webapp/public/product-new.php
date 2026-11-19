@@ -26,9 +26,9 @@ $created = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireValidCsrf();
 
-    $name = trim($_POST['name'] ?? '');
-    $description = trim($_POST['description'] ?? '');
-    $price = $_POST['price'] ?? '';
+    $name = trim(postString('name'));
+    $description = trim(postString('description'));
+    $price = postString('price');
 
     if ($name === '' || !is_numeric($price)) {
         $error = 'Nombre y precio (numérico) son obligatorios';
