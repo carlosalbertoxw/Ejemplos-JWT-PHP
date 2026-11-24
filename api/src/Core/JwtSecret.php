@@ -22,7 +22,7 @@ final class JwtSecret
         if (is_string($fromEnv) && $fromEnv !== '') {
             if (strlen($fromEnv) < self::MIN_BYTES) {
                 throw new \RuntimeException(
-                    'JWT_SECRET debe tener al menos ' . self::MIN_BYTES . ' bytes'
+                    'JWT_SECRET debe tener al menos ' . self::MIN_BYTES . ' bytes',
                 );
             }
             return $fromEnv;
@@ -30,7 +30,7 @@ final class JwtSecret
 
         if ($environment === 'production') {
             throw new \RuntimeException(
-                'JWT_SECRET es obligatoria cuando APP_ENV=production'
+                'JWT_SECRET es obligatoria cuando APP_ENV=production',
             );
         }
 

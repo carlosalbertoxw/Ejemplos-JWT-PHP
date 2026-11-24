@@ -4,6 +4,7 @@
  * Plantilla compartida: encabezado con navegación y pie de página.
  */
 
+/** @param array<string, mixed>|null $user */
 function renderHeader(string $title, ?array $user): void
 {
     // Cabeceras de seguridad de toda página HTML de la aplicación.

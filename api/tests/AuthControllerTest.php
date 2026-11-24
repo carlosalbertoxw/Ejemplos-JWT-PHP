@@ -80,7 +80,7 @@ final class AuthControllerTest extends TestCase
     private function login(string $username, string $password, string $ip): Response
     {
         return $this->controller->login(
-            $this->request(['username' => $username, 'password' => $password], $ip)
+            $this->request(['username' => $username, 'password' => $password], $ip),
         );
     }
 

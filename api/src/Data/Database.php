@@ -5,14 +5,22 @@ namespace Api\Data;
 use Api\Core\PasswordHasher;
 
 /**
- * Conexión PDO a SQLite. En la primera ejecución crea el esquema y
- * siembra los datos de ejemplo (usuarios y productos).
+ * Conexión PDO a SQLite. La primera vez crea el esquema y siembra los
+ * datos de ejemplo (usuarios y productos).
  *
  * Cambiar a otra base de datos solo requiere modificar esta capa:
  * el resto de la aplicación trabaja contra los repositorios.
  */
 final class Database
 {
+    /**
+     * Versión del esquema, guardada en PRAGMA user_version. Cada petición
+     * solo lee este número; el esquema se crea o migra únicamente cuando la
+     * base tiene una versión menor. Un cambio de esquema futuro sube este
+     * valor y agrega su paso en initialize().
+     */
+    private const SCHEMA_VERSION = 1;
+
     private \PDO $pdo;
 
     public function __construct(string $dbPath)
@@ -22,30 +30,69 @@ final class Database
             mkdir($dir, 0775, true);
         }
 
-        $isNew = !is_file($dbPath);
-
         $this->pdo = new \PDO('sqlite:' . $dbPath);
         $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         $this->pdo->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC);
+        // Estos dos PRAGMA son por conexión (cada petición abre la suya).
+        // busy_timeout hace que una conexión espere, en vez de fallar con
+        // "database is locked", cuando otra está escribiendo.
         $this->pdo->exec('PRAGMA foreign_keys = ON');
-        // WAL permite lecturas concurrentes con una escritura, y busy_timeout
-        // hace que una conexión espere (en vez de fallar con "database is
-        // locked") cuando otra está escribiendo: Apache atiende en paralelo.
-        $this->pdo->exec('PRAGMA journal_mode = WAL');
         $this->pdo->exec('PRAGMA busy_timeout = 5000');
 
-        // El esquema usa IF NOT EXISTS: crearlo siempre es idempotente y
-        // añade las tablas nuevas a bases creadas por versiones anteriores.
-        $this->createSchema();
-        $this->migrate();
-        if ($isNew) {
-            $this->seed();
+        if ($this->schemaVersion() < self::SCHEMA_VERSION) {
+            $this->initialize();
         }
     }
 
     public function pdo(): \PDO
     {
         return $this->pdo;
+    }
+
+    private function scalar(string $sql): mixed
+    {
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute();
+        return $stmt->fetchColumn();
+    }
+
+    private function schemaVersion(): int
+    {
+        return (int) $this->scalar('PRAGMA user_version');
+    }
+
+    /**
+     * Crea o migra el esquema y siembra los datos en una sola transacción.
+     *
+     * BEGIN IMMEDIATE toma el bloqueo de escritura antes de releer la
+     * versión: si dos primeras peticiones llegan a la vez, la segunda espera
+     * y, al entrar, ve que ya no hay nada que hacer (sin sembrar dos veces).
+     */
+    private function initialize(): void
+    {
+        // WAL permite lecturas concurrentes con una escritura (Apache atiende
+        // en paralelo). Es persistente en el archivo, así que basta fijarlo
+        // una vez, y no se puede cambiar dentro de una transacción.
+        $this->pdo->exec('PRAGMA journal_mode = WAL');
+
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if ($this->schemaVersion() < self::SCHEMA_VERSION) {
+                // IF NOT EXISTS: también sirve para bases creadas por versiones
+                // anteriores, que no tenían user_version.
+                $this->createSchema();
+                $this->migrate();
+                $hasUsers = (int) $this->scalar('SELECT COUNT(*) FROM users') > 0;
+                if (!$hasUsers) {
+                    $this->seed();
+                }
+                $this->pdo->exec('PRAGMA user_version = ' . self::SCHEMA_VERSION);
+            }
+            $this->pdo->exec('COMMIT');
+        } catch (\Throwable $e) {
+            $this->pdo->exec('ROLLBACK');
+            throw $e;
+        }
     }
 
     private function createSchema(): void
@@ -92,7 +139,9 @@ final class Database
      */
     private function migrate(): void
     {
-        $columns = $this->pdo->query('PRAGMA table_info(refresh_tokens)')->fetchAll();
+        $stmt = $this->pdo->prepare('PRAGMA table_info(refresh_tokens)');
+        $stmt->execute();
+        $columns = $stmt->fetchAll();
         if (in_array('created_at', array_column($columns, 'name'), true)) {
             $this->pdo->exec('ALTER TABLE refresh_tokens DROP COLUMN created_at');
         }
@@ -103,13 +152,13 @@ final class Database
         $hasher = new PasswordHasher();
 
         $insertUser = $this->pdo->prepare(
-            'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)'
+            'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
         );
         $insertUser->execute(['admin', $hasher->hash('Admin123!'), 'Admin']);
         $insertUser->execute(['user', $hasher->hash('User123!'), 'User']);
 
         $insertProduct = $this->pdo->prepare(
-            'INSERT INTO products (name, description, price) VALUES (?, ?, ?)'
+            'INSERT INTO products (name, description, price) VALUES (?, ?, ?)',
         );
         $insertProduct->execute(['Teclado mecánico', 'Switches rojos, retroiluminado', 89.99]);
         $insertProduct->execute(['Mouse inalámbrico', 'Sensor óptico de 16000 DPI', 45.50]);

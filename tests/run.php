@@ -1,28 +1,31 @@
 <?php
 
 /**
- * Runner de las pruebas unitarias de la API.
+ * Runner de las pruebas unitarias de la API y de la aplicación web.
  *
- * Uso:  php tests/run.php        (desde la carpeta api/)
- *       php api/tests/run.php    (desde la raíz del repositorio)
+ * Uso (desde la raíz del repositorio):  php tests/run.php
  *
- * Descubre todas las clases *Test.php de esta carpeta, ejecuta sus métodos
- * test* (cada uno sobre una instancia nueva, con setUp previo) y termina
- * con código distinto de 0 si alguna prueba falla.
+ * Descubre todas las clases *Test.php de api/tests/ y webapp/tests/,
+ * ejecuta sus métodos test* (cada uno sobre una instancia nueva, con setUp
+ * previo) y termina con código distinto de 0 si alguna prueba falla.
  */
 
 declare(strict_types=1);
 
-require __DIR__ . '/../src/autoload.php';
+$root = dirname(__DIR__);
+require $root . '/api/src/autoload.php';
+require $root . '/webapp/src/autoload.php';
 require __DIR__ . '/TestCase.php';
 
-foreach (glob(__DIR__ . '/*Test.php') as $file) {
-    require_once $file;
+foreach (['api', 'webapp'] as $project) {
+    foreach (glob("$root/$project/tests/*Test.php") ?: [] as $file) {
+        require_once $file;
+    }
 }
 
 $testClasses = array_filter(
     get_declared_classes(),
-    fn (string $class): bool => is_subclass_of($class, TestCase::class),
+    fn(string $class): bool => is_subclass_of($class, TestCase::class),
 );
 
 $passed = 0;

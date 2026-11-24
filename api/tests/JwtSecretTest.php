@@ -28,7 +28,7 @@ final class JwtSecretTest extends TestCase
     {
         $this->expectException(
             \RuntimeException::class,
-            fn () => JwtSecret::resolve('corta', 'development', $this->file),
+            fn() => JwtSecret::resolve('corta', 'development', $this->file),
         );
     }
 
@@ -36,7 +36,7 @@ final class JwtSecretTest extends TestCase
     {
         $this->expectException(
             \RuntimeException::class,
-            fn () => JwtSecret::resolve(false, 'production', $this->file),
+            fn() => JwtSecret::resolve(false, 'production', $this->file),
         );
     }
 

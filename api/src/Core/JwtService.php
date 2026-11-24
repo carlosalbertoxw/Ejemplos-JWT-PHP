@@ -27,7 +27,7 @@ final class JwtService
         // el RFC 7518 exige una clave de al menos 256 bits (32 bytes).
         if (strlen($secret) < JwtSecret::MIN_BYTES) {
             throw new \InvalidArgumentException(
-                'La clave de firma debe tener al menos ' . JwtSecret::MIN_BYTES . ' bytes'
+                'La clave de firma debe tener al menos ' . JwtSecret::MIN_BYTES . ' bytes',
             );
         }
     }
@@ -35,6 +35,8 @@ final class JwtService
     /**
      * Crea un token firmado con los claims de negocio recibidos más los
      * claims estándar: iss, aud, iat, nbf, exp y jti.
+     *
+     * @param array<string, mixed> $claims
      */
     public function create(array $claims): string
     {
@@ -51,8 +53,8 @@ final class JwtService
 
         $header = ['alg' => self::ALGORITHM, 'typ' => 'JWT'];
 
-        $headerB64 = $this->base64UrlEncode(json_encode($header));
-        $payloadB64 = $this->base64UrlEncode(json_encode($payload));
+        $headerB64 = $this->base64UrlEncode(json_encode($header, JSON_THROW_ON_ERROR));
+        $payloadB64 = $this->base64UrlEncode(json_encode($payload, JSON_THROW_ON_ERROR));
 
         $signature = $this->sign("$headerB64.$payloadB64");
 
@@ -65,6 +67,7 @@ final class JwtService
      * Comprueba, en este orden: estructura, algoritmo, firma, vigencia
      * (exp / nbf) y emisor/audiencia.
      *
+     * @return array<string, mixed>
      * @throws JwtException si el token no es válido.
      */
     public function verify(string $token): array

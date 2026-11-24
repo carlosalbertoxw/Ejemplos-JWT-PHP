@@ -16,11 +16,10 @@ use Api\Core\JwtService;
  */
 final class Router
 {
+    /** @var list<array{method: string, path: string, handler: callable, access: Access, role: ?string}> */
     private array $routes = [];
 
-    public function __construct(private readonly JwtService $jwt)
-    {
-    }
+    public function __construct(private readonly JwtService $jwt) {}
 
     public function add(
         string $method,
@@ -34,6 +33,16 @@ final class Router
             $access = Access::Auth;
         }
         $this->routes[] = compact('method', 'path', 'handler', 'access', 'role');
+    }
+
+    /**
+     * Rutas declaradas como "MÉTODO /ruta" (p. ej. "GET /api/products").
+     *
+     * @return list<string>
+     */
+    public function routes(): array
+    {
+        return array_map(fn(array $r): string => $r['method'] . ' ' . $r['path'], $this->routes);
     }
 
     public function dispatch(Request $request): Response
@@ -68,7 +77,11 @@ final class Router
         return Response::error('Ruta no encontrada', 404);
     }
 
-    /** Valida el bearer token: devuelve sus claims o la respuesta 401. */
+    /**
+     * Valida el bearer token: devuelve sus claims o la respuesta 401.
+     *
+     * @return array<string, mixed>|Response
+     */
     private function authenticate(Request $request): array|Response
     {
         if ($request->bearerToken === null) {

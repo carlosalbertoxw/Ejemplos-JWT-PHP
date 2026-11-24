@@ -13,13 +13,21 @@ use WebApp\Auth\TokenStore;
  */
 final class ApiHttpClient
 {
+    private readonly HttpTransport $transport;
+
     public function __construct(
         private readonly string $baseUrl,
         private readonly TokenStore $tokens,
+        ?HttpTransport $transport = null,
     ) {
+        $this->transport = $transport ?? new CurlTransport();
     }
 
-    /** Petición pública (sin token). */
+    /**
+     * Petición pública (sin token).
+     *
+     * @param array<string, mixed>|null $body
+     */
     public function request(string $method, string $path, ?array $body = null): ApiResponse
     {
         return $this->send($method, $path, $body, null);
@@ -27,6 +35,8 @@ final class ApiHttpClient
 
     /**
      * Petición autenticada con manejo automático de expiración.
+     *
+     * @param array<string, mixed>|null $body
      */
     public function authenticatedRequest(string $method, string $path, ?array $body = null): ApiResponse
     {
@@ -62,6 +72,7 @@ final class ApiHttpClient
         return true;
     }
 
+    /** @param array<string, mixed>|null $body */
     private function send(string $method, string $path, ?array $body, ?string $bearerToken): ApiResponse
     {
         $headers = ['Accept: application/json'];
@@ -69,35 +80,12 @@ final class ApiHttpClient
             $headers[] = 'Authorization: Bearer ' . $bearerToken;
         }
 
-        $options = [
-            CURLOPT_URL => rtrim($this->baseUrl, '/') . $path,
-            CURLOPT_CUSTOMREQUEST => $method,
-            CURLOPT_RETURNTRANSFER => true,
-            // Si la API está caída conviene fallar rápido (3 s para conectar)
-            // en vez de dejar la página en blanco los 10 s del timeout total.
-            CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_TIMEOUT => 10,
-        ];
-
+        $json = null;
         if ($body !== null) {
             $headers[] = 'Content-Type: application/json';
-            $options[CURLOPT_POSTFIELDS] = json_encode($body);
-        }
-        $options[CURLOPT_HTTPHEADER] = $headers;
-
-        $curl = curl_init();
-        curl_setopt_array($curl, $options);
-        $raw = curl_exec($curl);
-        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-        $errno = curl_errno($curl);
-        $error = curl_error($curl);
-
-        if ($errno !== 0) {
-            // La API no respondió (contenedor caído, red, etc.).
-            return new ApiResponse(0, ['error' => 'No se pudo contactar la API: ' . $error]);
+            $json = json_encode($body, JSON_THROW_ON_ERROR);
         }
 
-        $data = json_decode((string) $raw, true);
-        return new ApiResponse($status, is_array($data) ? $data : []);
+        return $this->transport->send($method, rtrim($this->baseUrl, '/') . $path, $headers, $json);
     }
 }

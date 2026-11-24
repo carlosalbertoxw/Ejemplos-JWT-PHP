@@ -19,11 +19,12 @@ final class AuthServiceTest extends TestCase
     private AuthService $auth;
     private JwtService $jwt;
     private RefreshTokenRepository $refreshTokens;
+    private \PDO $pdo;
 
     protected function setUp(): void
     {
         // Base en memoria: Database crea el esquema y siembra admin/user.
-        $pdo = (new Database(':memory:'))->pdo();
+        $pdo = $this->pdo = (new Database(':memory:'))->pdo();
 
         $this->jwt = new JwtService('secreto-de-pruebas-de-al-menos-32-bytes', 'iss', 'aud', 900);
         $this->refreshTokens = new RefreshTokenRepository($pdo);
@@ -138,5 +139,31 @@ final class AuthServiceTest extends TestCase
     public function testUnRefreshTokenDesconocidoNoRenueva(): void
     {
         $this->assertNull($this->auth->refresh(bin2hex(random_bytes(32))));
+    }
+
+    public function testElSenueloTieneElMismoCosteQueLosHashesReales(): void
+    {
+        // Si el señuelo costara menos, un usuario inexistente respondería más
+        // rápido y se podría saber qué usuarios existen.
+        $hasher = new PasswordHasher();
+        $this->assertSame(
+            password_get_info($hasher->hash('cualquiera'))['options'],
+            password_get_info($hasher->decoyHash())['options'],
+        );
+        $this->assertFalse($hasher->needsRehash($hasher->decoyHash()));
+    }
+
+    public function testElLoginRehaceLosHashesCreadosConOtroCoste(): void
+    {
+        // Simula un usuario sembrado con el coste por defecto de PHP < 8.4.
+        $oldHash = password_hash('User123!', PASSWORD_BCRYPT, ['cost' => 10]);
+        $this->pdo->prepare('UPDATE users SET password_hash = ? WHERE username = ?')
+            ->execute([$oldHash, 'user']);
+
+        $this->assertNotNull($this->auth->login('user', 'User123!'));
+
+        $stored = $this->pdo->query("SELECT password_hash FROM users WHERE username = 'user'")->fetchColumn();
+        $this->assertSame(PasswordHasher::COST, password_get_info($stored)['options']['cost']);
+        $this->assertNotNull($this->auth->login('user', 'User123!'), 'El hash nuevo debe seguir validando');
     }
 }

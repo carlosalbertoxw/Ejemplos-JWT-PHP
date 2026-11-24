@@ -7,9 +7,7 @@ namespace WebApp\Api;
  */
 final class ProductsApiClient
 {
-    public function __construct(private readonly ApiHttpClient $http)
-    {
-    }
+    public function __construct(private readonly ApiHttpClient $http) {}
 
     /** Catálogo público, sin precios (no requiere sesión). */
     public function publicList(): ApiResponse

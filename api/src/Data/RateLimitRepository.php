@@ -8,14 +8,12 @@ namespace Api\Data;
  */
 final class RateLimitRepository
 {
-    public function __construct(private readonly \PDO $pdo)
-    {
-    }
+    public function __construct(private readonly \PDO $pdo) {}
 
     public function add(string $key, int $timestamp): void
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO rate_limit_attempts (attempt_key, attempted_at) VALUES (?, ?)'
+            'INSERT INTO rate_limit_attempts (attempt_key, attempted_at) VALUES (?, ?)',
         );
         $stmt->execute([$key, $timestamp]);
     }
@@ -25,7 +23,7 @@ final class RateLimitRepository
     {
         $stmt = $this->pdo->prepare(
             'SELECT COUNT(*) FROM rate_limit_attempts
-             WHERE attempt_key = ? AND attempted_at >= ?'
+             WHERE attempt_key = ? AND attempted_at >= ?',
         );
         $stmt->execute([$key, $since]);
         return (int) $stmt->fetchColumn();
@@ -36,7 +34,7 @@ final class RateLimitRepository
     {
         $stmt = $this->pdo->prepare(
             'SELECT MIN(attempted_at) FROM rate_limit_attempts
-             WHERE attempt_key = ? AND attempted_at >= ?'
+             WHERE attempt_key = ? AND attempted_at >= ?',
         );
         $stmt->execute([$key, $since]);
         $oldest = $stmt->fetchColumn();

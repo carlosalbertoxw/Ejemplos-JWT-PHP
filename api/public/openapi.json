@@ -514,16 +514,19 @@
         "properties": {
           "name": {
             "type": "string",
+            "maxLength": 100,
             "example": "Webcam 4K"
           },
           "description": {
             "type": "string",
+            "maxLength": 500,
             "example": "Enfoque automático, micrófono integrado"
           },
           "price": {
             "type": "number",
             "format": "float",
             "minimum": 0,
+            "maximum": 1000000000,
             "example": 75.5
           }
         }

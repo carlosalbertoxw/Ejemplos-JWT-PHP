@@ -23,7 +23,6 @@ use Api\Data\ProductRepository;
 use Api\Data\RateLimitRepository;
 use Api\Data\RefreshTokenRepository;
 use Api\Data\UserRepository;
-use Api\Http\Access;
 use Api\Http\Request;
 use Api\Http\Response;
 use Api\Http\Router;
@@ -67,36 +66,9 @@ try {
     $authController = new AuthController($authService, $accountLimiter, $ipLimiter);
     $productController = new ProductController(new ProductRepository($pdo));
 
-    // --- Rutas ---
+    // --- Rutas (ver config/routes.php) ---
     $router = new Router($jwt);
-
-    // Liveness: solo confirma que PHP responde (lo usa el healthcheck de Docker).
-    $router->add('GET', '/health', fn (Request $r) => Response::json(['status' => 'ok']));
-
-    $router->add('GET', '/', fn (Request $r) => Response::json([
-        'name' => 'API de ejemplo JWT en PHP puro',
-        'docs' => '/docs (Swagger UI) — especificación en /openapi.json',
-        'endpoints' => [
-            'POST /api/auth/login',
-            'POST /api/auth/refresh',
-            'POST /api/auth/logout',
-            'GET  /api/auth/me       (Bearer)',
-            'GET  /api/products/public',
-            'GET  /api/products      (Bearer)',
-            'POST /api/products      (Bearer, rol Admin)',
-        ],
-    ]));
-
-    $router->add('POST', '/api/auth/login', [$authController, 'login']);
-    $router->add('POST', '/api/auth/refresh', [$authController, 'refresh']);
-    // El logout es público: el refresh token del cuerpo es la credencial. Así
-    // el cliente no necesita un access token vigente (ni renovarlo) para salir.
-    $router->add('POST', '/api/auth/logout', [$authController, 'logout']);
-    $router->add('GET', '/api/auth/me', [$authController, 'me'], Access::Auth);
-
-    $router->add('GET', '/api/products/public', [$productController, 'publicList']);
-    $router->add('GET', '/api/products', [$productController, 'list'], Access::Auth);
-    $router->add('POST', '/api/products', [$productController, 'create'], Access::Auth, 'Admin');
+    (require __DIR__ . '/../config/routes.php')($router, $authController, $productController);
 
     $router->dispatch(Request::fromGlobals())->send();
 } catch (\Throwable $e) {

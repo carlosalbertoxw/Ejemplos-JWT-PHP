@@ -10,16 +10,14 @@ namespace Api\Data;
  */
 final class RefreshTokenRepository
 {
-    public function __construct(private readonly \PDO $pdo)
-    {
-    }
+    public function __construct(private readonly \PDO $pdo) {}
 
     /** Genera un refresh token aleatorio, lo persiste y lo devuelve en claro. */
     public function create(int $userId, int $ttlSeconds): string
     {
         $token = bin2hex(random_bytes(32)); // 64 caracteres hex, imposible de adivinar
         $stmt = $this->pdo->prepare(
-            'INSERT INTO refresh_tokens (token_hash, user_id, expires_at) VALUES (?, ?, ?)'
+            'INSERT INTO refresh_tokens (token_hash, user_id, expires_at) VALUES (?, ?, ?)',
         );
         $stmt->execute([$this->hash($token), $userId, time() + $ttlSeconds]);
         return $token;
@@ -38,13 +36,17 @@ final class RefreshTokenRepository
     {
         $stmt = $this->pdo->prepare(
             'UPDATE refresh_tokens SET revoked = 1
-             WHERE token_hash = ? AND revoked = 0 AND expires_at > ?'
+             WHERE token_hash = ? AND revoked = 0 AND expires_at > ?',
         );
         $stmt->execute([$this->hash($token), time()]);
         return $stmt->rowCount() === 1;
     }
 
-    /** Devuelve el registro sin filtrar por estado, o null. */
+    /**
+     * Devuelve el registro sin filtrar por estado, o null.
+     *
+     * @return array<string, mixed>|null
+     */
     public function find(string $token): ?array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM refresh_tokens WHERE token_hash = ?');
@@ -57,7 +59,7 @@ final class RefreshTokenRepository
     public function revoke(string $token): void
     {
         $stmt = $this->pdo->prepare(
-            'UPDATE refresh_tokens SET revoked = 1 WHERE token_hash = ?'
+            'UPDATE refresh_tokens SET revoked = 1 WHERE token_hash = ?',
         );
         $stmt->execute([$this->hash($token)]);
     }
@@ -66,7 +68,7 @@ final class RefreshTokenRepository
     public function revokeAllForUser(int $userId): void
     {
         $stmt = $this->pdo->prepare(
-            'UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?'
+            'UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?',
         );
         $stmt->execute([$userId]);
     }

@@ -17,8 +17,7 @@ final class Response
     private function __construct(
         private readonly int $status,
         private readonly mixed $data,
-    ) {
-    }
+    ) {}
 
     public static function json(mixed $data, int $status = 200): self
     {
@@ -46,9 +45,29 @@ final class Response
         return $this->data;
     }
 
-    /** Emite la respuesta al cliente y termina el proceso. */
+    /**
+     * Cuerpo JSON de la respuesta. Lanza \JsonException si los datos no se
+     * pueden serializar (p. ej. INF o NaN): sin JSON_THROW_ON_ERROR,
+     * json_encode devolvería false y el cliente recibiría un cuerpo vacío
+     * con un código de éxito.
+     */
+    public function body(): string
+    {
+        return json_encode(
+            $this->data,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        );
+    }
+
+    /**
+     * Emite la respuesta al cliente y termina el proceso. El cuerpo se
+     * serializa ANTES de enviar encabezados: si falla, el front controller
+     * todavía puede responder un 500.
+     */
     public function send(): never
     {
+        $body = $this->body();
+
         http_response_code($this->status);
         header('Content-Type: application/json; charset=utf-8');
 
@@ -61,7 +80,7 @@ final class Response
             header($name . ': ' . $value);
         }
 
-        echo json_encode($this->data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo $body;
         exit;
     }
 }

@@ -10,6 +10,7 @@ namespace WebApp\Auth;
  */
 final class TokenStore
 {
+    /** @param array<string, mixed> $tokens */
     public function save(array $tokens): void
     {
         $_SESSION['access_token'] = $tokens['access_token'];
@@ -26,11 +27,13 @@ final class TokenStore
         return $_SESSION['refresh_token'] ?? null;
     }
 
+    /** @param array<string, mixed> $user */
     public function saveUser(array $user): void
     {
         $_SESSION['user'] = $user;
     }
 
+    /** @return array<string, mixed>|null */
     public function user(): ?array
     {
         return $_SESSION['user'] ?? null;

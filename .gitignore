@@ -8,3 +8,6 @@ api/data/
 .idea/
 .vscode/
 nbproject/
+
+# Caché de php-cs-fixer
+.php-cs-fixer.cache

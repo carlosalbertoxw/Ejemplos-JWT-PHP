@@ -20,32 +20,48 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
-          tools: phpstan:2.3
+          tools: phpstan:2.3, php-cs-fixer:3
 
       - name: Verificar sintaxis de todos los archivos PHP
         run: |
-          find api webapp -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+          find api webapp tests -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
           echo "Sintaxis OK"
 
-      - name: Análisis estático (PHPStan)
+      - name: Estilo de código (php-cs-fixer, PER-CS)
+        run: php-cs-fixer check --diff --show-progress=none
+
+      - name: Análisis estático (PHPStan nivel 8)
         run: phpstan analyse --no-progress
 
-      - name: Ejecutar pruebas unitarias
-        run: php api/tests/run.php
+      - name: Pruebas de la API y de la web
+        run: php tests/run.php
 
       - name: Validar el contrato OpenAPI
         run: npx --yes @redocly/cli@2 lint api/public/openapi.json
 
+  semgrep:
+    # Análisis de seguridad del código (SAST). CodeQL no soporta PHP.
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.186.0
+    steps:
+      - uses: actions/checkout@v7
+      - name: Semgrep (reglas de PHP)
+        run: semgrep scan --config p/php --error --metrics=off
+
   docker:
-    # Construye las imágenes y levanta el stack con docker compose. Así se
-    # prueban de verdad los Dockerfiles (y los PR de Dependabot que cambian sus
-    # imágenes base) y que los health checks respondan.
+    # Construye las imágenes, levanta el stack con docker compose y recorre el
+    # flujo completo del contrato JWT con la prueba de humo. Así se prueban de
+    # verdad los Dockerfiles (y los PR de Dependabot que cambian sus imágenes base).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
       - name: Construir y levantar
         run: docker compose up --build --detach --wait --wait-timeout 300
+
+      - name: Prueba de humo del contrato (API en el puerto 8000)
+        run: bash scripts/smoke.sh http://localhost:8000
 
       - name: Logs de los contenedores
         if: failure()

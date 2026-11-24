@@ -9,16 +9,12 @@
 declare(strict_types=1);
 
 /** Falla de aserción (distinta de un error inesperado del código probado). */
-final class AssertionFailedError extends \Exception
-{
-}
+final class AssertionFailedError extends \Exception {}
 
 abstract class TestCase
 {
     /** Se ejecuta antes de cada método de prueba. */
-    protected function setUp(): void
-    {
-    }
+    protected function setUp(): void {}
 
     protected function assertTrue(bool $condition, string $message = ''): void
     {
@@ -75,13 +71,16 @@ abstract class TestCase
             if (!($e instanceof $class)) {
                 $this->fail(sprintf(
                     'Se esperaba %s pero se lanzó %s ("%s")',
-                    $class, $e::class, $e->getMessage(),
+                    $class,
+                    $e::class,
+                    $e->getMessage(),
                 ));
             }
             if ($expectedMessage !== null && $e->getMessage() !== $expectedMessage) {
                 $this->fail(sprintf(
                     "Mensaje de excepción distinto\n  Esperado: %s\n  Recibido: %s",
-                    $expectedMessage, $e->getMessage(),
+                    $expectedMessage,
+                    $e->getMessage(),
                 ));
             }
             return;

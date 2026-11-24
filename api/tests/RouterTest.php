@@ -22,17 +22,17 @@ final class RouterTest extends TestCase
         $this->jwt = new JwtService('secreto-de-pruebas-de-al-menos-32-bytes', 'iss', 'aud', 900);
 
         $this->router = new Router($this->jwt);
-        $this->router->add('GET', '/ping', fn (Request $r) => Response::json(['pong' => true]));
+        $this->router->add('GET', '/ping', fn(Request $r) => Response::json(['pong' => true]));
         $this->router->add(
             'GET',
             '/secure',
-            fn (Request $r) => Response::json(['user' => $r->claims['username'] ?? null]),
+            fn(Request $r) => Response::json(['user' => $r->claims['username'] ?? null]),
             Access::Auth,
         );
         $this->router->add(
             'POST',
             '/admin',
-            fn (Request $r) => Response::json(['ok' => true], 201),
+            fn(Request $r) => Response::json(['ok' => true], 201),
             Access::Auth,
             'Admin',
         );

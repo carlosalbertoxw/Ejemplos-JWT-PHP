@@ -30,7 +30,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $description = trim(postString('description'));
     $price = postString('price');
 
-    if ($name === '' || !is_numeric($price)) {
+    // is_finite: "1e999" es numérico pero se convierte en INF. La API valida
+    // el rango exacto; aquí solo se evita enviarle valores sin sentido.
+    if ($name === '' || !is_numeric($price) || !is_finite((float) $price)) {
         $error = 'Nombre y precio (numérico) son obligatorios';
     } else {
         $response = $productsClient->create($name, $description, (float) $price);
