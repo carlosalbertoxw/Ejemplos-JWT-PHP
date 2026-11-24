@@ -27,7 +27,7 @@ final class JwtServiceTest extends TestCase
     {
         $this->expectException(
             \InvalidArgumentException::class,
-            fn () => new JwtService('corta', self::ISSUER, self::AUDIENCE, 900),
+            fn() => new JwtService('corta', self::ISSUER, self::AUDIENCE, 900),
         );
     }
 
@@ -60,7 +60,7 @@ final class JwtServiceTest extends TestCase
         ]));
         $forged = "$header.$payload.$signature";
 
-        $this->expectException(JwtException::class, fn () => $this->jwt->verify($forged), 'Firma inválida');
+        $this->expectException(JwtException::class, fn() => $this->jwt->verify($forged), 'Firma inválida');
     }
 
     public function testRechazaElAlgoritmoNone(): void
@@ -73,7 +73,7 @@ final class JwtServiceTest extends TestCase
         ]));
         $forged = "$header.$payload.";
 
-        $this->expectException(JwtException::class, fn () => $this->jwt->verify($forged), 'Algoritmo no soportado');
+        $this->expectException(JwtException::class, fn() => $this->jwt->verify($forged), 'Algoritmo no soportado');
     }
 
     public function testRechazaUnTokenFirmadoConOtroSecreto(): void
@@ -81,7 +81,7 @@ final class JwtServiceTest extends TestCase
         $otherService = new JwtService('otro-secreto-distinto-de-al-menos-32-bytes', self::ISSUER, self::AUDIENCE, 900);
         $token = $otherService->create(['sub' => '1']);
 
-        $this->expectException(JwtException::class, fn () => $this->jwt->verify($token), 'Firma inválida');
+        $this->expectException(JwtException::class, fn() => $this->jwt->verify($token), 'Firma inválida');
     }
 
     public function testRechazaUnTokenExpirado(): void
@@ -90,7 +90,7 @@ final class JwtServiceTest extends TestCase
         $expiredIssuer = new JwtService(self::SECRET, self::ISSUER, self::AUDIENCE, -120);
         $token = $expiredIssuer->create(['sub' => '1']);
 
-        $this->expectException(JwtException::class, fn () => $this->jwt->verify($token), 'Token expirado');
+        $this->expectException(JwtException::class, fn() => $this->jwt->verify($token), 'Token expirado');
     }
 
     public function testElLeewayToleraUnaExpiracionReciente(): void
@@ -109,7 +109,7 @@ final class JwtServiceTest extends TestCase
         $otherIssuer = new JwtService(self::SECRET, 'emisor-malicioso', self::AUDIENCE, 900);
         $token = $otherIssuer->create(['sub' => '1']);
 
-        $this->expectException(JwtException::class, fn () => $this->jwt->verify($token), 'Emisor inválido');
+        $this->expectException(JwtException::class, fn() => $this->jwt->verify($token), 'Emisor inválido');
     }
 
     public function testRechazaUnaAudienciaIncorrecta(): void
@@ -117,7 +117,7 @@ final class JwtServiceTest extends TestCase
         $otherAudience = new JwtService(self::SECRET, self::ISSUER, 'otra-app', 900);
         $token = $otherAudience->create(['sub' => '1']);
 
-        $this->expectException(JwtException::class, fn () => $this->jwt->verify($token), 'Audiencia inválida');
+        $this->expectException(JwtException::class, fn() => $this->jwt->verify($token), 'Audiencia inválida');
     }
 
     public function testRechazaUnTokenSinExp(): void
@@ -129,21 +129,21 @@ final class JwtServiceTest extends TestCase
             'aud' => self::AUDIENCE,
         ]);
 
-        $this->expectException(JwtException::class, fn () => $this->jwt->verify($token), 'Falta el claim exp');
+        $this->expectException(JwtException::class, fn() => $this->jwt->verify($token), 'Falta el claim exp');
     }
 
     public function testRechazaUnaEstructuraInvalida(): void
     {
         $this->expectException(
             JwtException::class,
-            fn () => $this->jwt->verify('no-es.un-jwt'),
+            fn() => $this->jwt->verify('no-es.un-jwt'),
             'Estructura de token inválida',
         );
     }
 
     public function testRechazaBase64Invalido(): void
     {
-        $this->expectException(JwtException::class, fn () => $this->jwt->verify('!!!.@@@.###'));
+        $this->expectException(JwtException::class, fn() => $this->jwt->verify('!!!.@@@.###'));
     }
 
     /** Firma un payload arbitrario con el mismo secreto (para forjar casos). */

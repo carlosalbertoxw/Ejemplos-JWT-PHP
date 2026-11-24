@@ -20,8 +20,7 @@ final class RateLimiter
         private readonly RateLimitRepository $attempts,
         private readonly int $maxAttempts,
         private readonly int $windowSeconds,
-    ) {
-    }
+    ) {}
 
     public function tooManyAttempts(string $key): bool
     {

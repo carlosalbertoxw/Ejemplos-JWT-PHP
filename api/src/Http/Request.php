@@ -7,6 +7,10 @@ namespace Api\Http;
  */
 final class Request
 {
+    /**
+     * @param array<string, mixed> $body
+     * @param array<string, mixed>|null $claims
+     */
     public function __construct(
         public readonly string $method,
         public readonly string $path,
@@ -16,8 +20,7 @@ final class Request
         public readonly string $ip = '0.0.0.0',
         /** Claims del access token; los rellena el router si la ruta exige autenticación. */
         public ?array $claims = null,
-    ) {
-    }
+    ) {}
 
     /** Construye la petición a partir de las superglobales de PHP. */
     public static function fromGlobals(): self

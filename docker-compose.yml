@@ -31,7 +31,9 @@ services:
   webapp:
     build: ./webapp
     ports:
-      - "8080:80"            # http://localhost:8080
+      # 8001 y no 8080: así no choca con la API del ejemplo Java (8080) y se
+      # pueden levantar los stacks de los tres ejemplos a la vez.
+      - "8001:80"            # http://localhost:8001
     environment:
       # Dentro de la red de compose, la API se resuelve por su nombre de servicio
       API_URL: "http://api"

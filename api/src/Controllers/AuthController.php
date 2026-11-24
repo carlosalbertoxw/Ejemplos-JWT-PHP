@@ -27,8 +27,7 @@ final class AuthController
         private readonly RateLimiter $accountLimiter,
         /** Límite más holgado por IP, compartido por todas las cuentas. */
         private readonly RateLimiter $ipLimiter,
-    ) {
-    }
+    ) {}
 
     /** POST /api/auth/login — valida credenciales y emite el par de tokens. */
     public function login(Request $request): Response

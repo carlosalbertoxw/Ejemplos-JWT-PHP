@@ -7,11 +7,11 @@ namespace WebApp\Api;
  */
 final class ApiResponse
 {
+    /** @param array<mixed> $data */
     public function __construct(
         public readonly int $status,
         public readonly array $data,
-    ) {
-    }
+    ) {}
 
     public function ok(): bool
     {

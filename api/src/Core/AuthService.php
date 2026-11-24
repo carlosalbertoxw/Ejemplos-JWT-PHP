@@ -11,14 +11,6 @@ use Api\Data\UserRepository;
  */
 final class AuthService
 {
-    /**
-     * Hash bcrypt VÁLIDO de una cadena descartable. Cuando el usuario no
-     * existe se verifica la contraseña contra este señuelo para que el
-     * tiempo de respuesta sea el mismo que con un usuario real y no se
-     * pueda deducir qué usuarios existen (ataque de enumeración por timing).
-     */
-    private const DECOY_HASH = '$2y$10$/13BG0nzGmkGffa.sDU11uVEDfKFDttofC1EDO4iB0K8gG4ybgQNC';
-
     public function __construct(
         private readonly UserRepository $users,
         private readonly RefreshTokenRepository $refreshTokens,
@@ -26,22 +18,31 @@ final class AuthService
         private readonly PasswordHasher $hasher,
         private readonly int $accessTokenTtl,
         private readonly int $refreshTokenTtl,
-    ) {
-    }
+    ) {}
 
     /**
      * Valida credenciales y devuelve el par de tokens, o null si son inválidas.
+     *
+     * @return array{access_token: string, refresh_token: string, token_type: string, expires_in: int}|null
      */
     public function login(string $username, string $password): ?array
     {
         $user = $this->users->findByUsername($username);
 
-        // Verificar SIEMPRE contra un hash real (el del usuario o el señuelo)
-        // para que el tiempo de respuesta no revele si el usuario existe.
-        $hash = $user['password_hash'] ?? self::DECOY_HASH;
+        // Verificar SIEMPRE contra un hash real (el del usuario o el señuelo,
+        // con el mismo coste) para que el tiempo de respuesta no revele si
+        // el usuario existe.
+        $hash = $user['password_hash'] ?? $this->hasher->decoyHash();
 
         if (!$this->hasher->verify($password, $hash) || $user === null) {
             return null;
+        }
+
+        // Hashes creados con otro coste (p. ej. bases sembradas con una
+        // versión anterior de PHP) se rehacen aprovechando que ahora se
+        // conoce la contraseña: así todos quedan con el coste del señuelo.
+        if ($this->hasher->needsRehash($hash)) {
+            $this->users->updatePasswordHash((int) $user['id'], $this->hasher->hash($password));
         }
 
         return $this->issueTokenPair($user);
@@ -54,6 +55,8 @@ final class AuthService
      * ya fue rotado/revocado, se asume robo (alguien lo usó dos veces) y se
      * revocan TODOS los refresh tokens del usuario: tanto el atacante como
      * el usuario legítimo pierden la sesión y deben volver a autenticarse.
+     *
+     * @return array{access_token: string, refresh_token: string, token_type: string, expires_in: int}|null
      */
     public function refresh(string $refreshToken): ?array
     {
@@ -99,6 +102,10 @@ final class AuthService
         }
     }
 
+    /**
+     * @param array<string, mixed> $user
+     * @return array{access_token: string, refresh_token: string, token_type: string, expires_in: int}
+     */
     private function issueTokenPair(array $user): array
     {
         // Mantenimiento oportunista: eliminar tokens ya expirados.

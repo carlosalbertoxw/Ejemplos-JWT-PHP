@@ -9,7 +9,7 @@ El proyecto se divide en dos partes independientes:
 | Carpeta | Qué es | Puerto (Docker) |
 |---|---|---|
 | [`api/`](api/) | API REST que emite y valida los tokens | http://localhost:8000 |
-| [`webapp/`](webapp/) | Aplicación web que consume la API | http://localhost:8080 |
+| [`webapp/`](webapp/) | Aplicación web que consume la API | http://localhost:8001 |
 
 ## Características
 
@@ -26,9 +26,10 @@ El proyecto se divide en dos partes independientes:
 - **Autorización por roles**: endpoint de creación de productos solo para `Admin`.
 - **Datos según nivel de acceso**: el catálogo público muestra los productos
   sin precio; el precio solo se expone en el endpoint autenticado.
-- **Contraseñas con bcrypt** (`password_hash` / `password_verify`), con
-  verificación contra un hash señuelo cuando el usuario no existe (el tiempo
-  de respuesta no revela qué usuarios existen).
+- **Contraseñas con bcrypt** (`password_hash` / `password_verify`) con coste
+  fijo (12), y verificación contra un hash señuelo del mismo coste cuando el
+  usuario no existe (el tiempo de respuesta no revela qué usuarios existen).
+  Los hashes creados con otro coste se rehacen en el siguiente login.
 - **Rate limiting anti fuerza bruta** en login y refresh: el login limita
   los fallos **por cuenta** (5 en 15 minutos, aunque el atacante cambie de
   IP) y **por IP** (20 en 15 minutos, contra el *password spraying*); el
@@ -46,12 +47,12 @@ El proyecto se divide en dos partes independientes:
   regeneración del ID de sesión al iniciar sesión, tokens anti-CSRF en todos
   los formularios (el logout es un POST) y cabeceras de seguridad
   (`CSP`, `X-Frame-Options`, `X-Content-Type-Options`…).
-- **Pruebas unitarias sin dependencias** (41 tests) del JWT, el flujo de
-  autenticación, el rate limiter, el controlador de auth y el router, con CI
-  en GitHub Actions (más análisis estático con PHPStan y validación del
-  contrato OpenAPI).
+- **Pruebas sin dependencias** de la API y de la web (ver [Pruebas](#pruebas)),
+  con CI en GitHub Actions: PHPStan nivel 8, estilo PER-CS, Semgrep, validación
+  del contrato OpenAPI y una prueba de humo contra el stack de Docker.
 - Persistencia en **SQLite** (se crea y siembra sola en el primer arranque;
-  modo WAL para tolerar peticiones concurrentes).
+  modo WAL para tolerar peticiones concurrentes). El precio de los productos
+  se valida como número finito entre 0 y 1 000 000 000.
 
 ## Cómo ejecutarlo (Docker)
 
@@ -65,7 +66,7 @@ Esto construye las dos imágenes (`api/Dockerfile` y `webapp/Dockerfile`) y
 levanta ambos contenedores. La base SQLite se crea y siembra sola en el
 primer arranque:
 
-- Aplicación web: **http://localhost:8080**
+- Aplicación web: **http://localhost:8001**
 - API (para probar directo con curl/Postman): **http://localhost:8000**
 - Documentación interactiva (Swagger UI): **http://localhost:8000/docs**
 
@@ -148,26 +149,19 @@ curl -s -X POST http://localhost:8000/api/auth/refresh \
 
 ```
 api/
-├── public/index.php      # Front controller: dependencias + rutas
+├── public/index.php      # Front controller: dependencias
 ├── config/config.php     # Configuración (lee variables de entorno)
-├── tests/                # Pruebas unitarias (runner propio, sin dependencias)
-│   ├── run.php                   # php tests/run.php
-│   ├── TestCase.php              # Aserciones mínimas
-│   ├── JwtServiceTest.php
-│   ├── AuthServiceTest.php
-│   ├── RateLimiterTest.php
-│   ├── AuthControllerTest.php
-│   ├── JwtSecretTest.php
-│   └── RouterTest.php
+├── config/routes.php     # Rutas (las mismas que usan las pruebas)
+├── tests/                # Pruebas unitarias de la API (ver «Pruebas»)
 └── src/
     ├── Core/             # Lógica de autenticación (sin HTTP)
     │   ├── JwtService.php        # Crea/valida JWT HS256 a mano
     │   ├── AuthService.php       # Login, rotación + detección de reuso, logout
     │   ├── RateLimiter.php       # Límite de intentos (ventana deslizante)
     │   ├── JwtSecret.php         # Clave JWT: variable de entorno o generada en dev
-    │   └── PasswordHasher.php    # bcrypt
+    │   └── PasswordHasher.php    # bcrypt con coste fijo + hash señuelo
     ├── Data/             # Acceso a datos (SQLite vía PDO)
-    │   ├── Database.php          # Conexión + esquema (y su migración) + datos semilla
+    │   ├── Database.php          # Conexión; esquema y datos semilla según PRAGMA user_version
     │   ├── UserRepository.php
     │   ├── RefreshTokenRepository.php
     │   ├── RateLimitRepository.php
@@ -196,11 +190,14 @@ webapp/
 │   ├── profile.php       # Claims del token (/api/auth/me)
 │   └── logout.php
 └── src/
-    ├── Api/              # Cliente HTTP de la API (cURL)
+    ├── Api/              # Cliente HTTP de la API
     │   ├── ApiHttpClient.php     # Canal común: 401 → refresh → reintento
+    │   ├── HttpTransport.php     # Envío de la petición (interfaz)
+    │   ├── CurlTransport.php     # Implementación con cURL
     │   ├── AuthApiClient.php
     │   └── ProductsApiClient.php
     └── Auth/TokenStore.php       # Tokens en la sesión PHP (nunca en el navegador)
+tests/                    # Pruebas de la web (con un transporte HTTP falso)
 ```
 
 La web es **PHP del lado del servidor**: los tokens se guardan en la sesión y
@@ -223,20 +220,28 @@ llega al navegador.
 
 ## Pruebas
 
-La API incluye pruebas unitarias escritas con un mini-runner propio (sin
-dependencias, fiel al espíritu "PHP puro"): cubren la creación/validación de
-JWT (firma manipulada, `alg: none`, expiración, emisor/audiencia…), el flujo
-de login/rotación/reuso/logout, el rate limiter y el router.
+Las pruebas usan un mini-runner propio (sin dependencias, fiel al espíritu
+"PHP puro"): [`tests/run.php`](tests/run.php) ejecuta las clases `*Test.php`
+de `api/tests/` y `webapp/tests/`. Cubren la creación/validación de JWT (firma
+manipulada, `alg: none`, expiración, emisor/audiencia…), el flujo de
+login/rotación/reuso/logout, el coste del hash señuelo, el rate limiter, el
+router, la validación de productos, el esquema SQLite, que `openapi.json`
+documente exactamente las rutas declaradas, y en la web el flujo
+401 → refresh → reintento.
 
 ```bash
-# Con PHP local
-php api/tests/run.php
+# Con PHP local, desde la raíz del repositorio
+php tests/run.php
 
 # O con Docker, sin instalar PHP
-docker run --rm -v "$PWD/api:/app" -w /app php:8.5-cli php tests/run.php
+docker run --rm -v "$PWD:/app" -w /app php:8.5-cli php tests/run.php
 ```
 
-También corren en CI en cada push (GitHub Actions: `.github/workflows/tests.yml`).
+En CI (`.github/workflows/tests.yml`) corren además el análisis estático
+(PHPStan nivel 8, [`phpstan.neon`](phpstan.neon)), el estilo de código
+(php-cs-fixer con PER-CS, [`.php-cs-fixer.dist.php`](.php-cs-fixer.dist.php)),
+el análisis de seguridad con Semgrep y una prueba de humo contra el stack de
+Docker ([`scripts/smoke.sh`](scripts/smoke.sh)).
 
 ## Configuración
 
@@ -266,14 +271,25 @@ Con PHP 8.3+ instalado (las imágenes usan 8.5), en dos terminales:
 # Terminal 1 — API en el puerto 8000
 cd api && php -S localhost:8000 -t public public/index.php
 
-# Terminal 2 — Web en el puerto 8080
-cd webapp && php -S localhost:8080 -t public
+# Terminal 2 — Web en el puerto 8001
+cd webapp && php -S localhost:8001 -t public
 ```
 
 > Nota: este proyecto es educativo. Para producción, además de definir
 > `APP_ENV=production` y una clave robusta en `JWT_SECRET`, se debe servir
 > todo por HTTPS (y activar el flag `secure` que la cookie de sesión ya
 > aplica automáticamente bajo HTTPS).
+
+## Puertos de los ejemplos JWT
+
+Los tres stacks de Docker Compose usan puertos distintos, así que se pueden levantar a la vez
+(por ejemplo, para probar la app Android contra cada API):
+
+| Ejemplo | API | Aplicación web |
+|---------|-----|----------------|
+| PHP | `8000` | `8001` |
+| Java | `8080` | `8081` |
+| .NET | `5274` | `5070` |
 
 ## Licencia
 

@@ -2,7 +2,7 @@
 # oficial, sin Composer, para mantener el proyecto en "PHP puro":
 #   php phpstan.phar analyse
 parameters:
-    level: 5
+    level: 8
     paths:
         - api/src
         - api/public/index.php

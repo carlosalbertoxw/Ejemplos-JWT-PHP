@@ -12,8 +12,7 @@ final class AuthApiClient
     public function __construct(
         private readonly ApiHttpClient $http,
         private readonly TokenStore $tokens,
-    ) {
-    }
+    ) {}
 
     /**
      * Inicia sesión: guarda los tokens y los datos del usuario en la sesión.
